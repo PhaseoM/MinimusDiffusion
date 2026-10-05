@@ -1,0 +1,12 @@
+.venv/
+.vscode/
+
+__pycache__/
+
+datasets/
+**/data/checkpoints/
+**/data/data_dump/
+**/data/data_eval/
+**/data/log_info/
+
+*.pth
