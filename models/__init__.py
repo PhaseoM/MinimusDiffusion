@@ -1,2 +1,2 @@
 from . import autoencoders
-from . import modulelib
+from . import modules

@@ -4,9 +4,11 @@
 __pycache__/
 
 datasets/
-**/data/checkpoints/
-**/data/data_dump/
-**/data/data_eval/
-**/data/log_info/
+# **/data/checkpoints/
+# **/data/data_dump/
+# **/data/data_eval/
+# **/data/log_info/
+
+**/results/
 
 *.pth

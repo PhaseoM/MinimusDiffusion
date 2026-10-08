@@ -30,7 +30,7 @@ class ResidualStack(nn.Module):
         num_groups: int = 1,
     ):
         super().__init__()
-        self.model = nn.Sequential(*self._res_stack(num_layers, in_channels, out_channels))
+        self.model = nn.Sequential(*self._res_stack(num_layers, in_channels, out_channels, num_groups))
 
     def _res_stack(
         self,
@@ -75,7 +75,7 @@ class AttentionBlock(nn.Module):
         return attn
 
 
-class DownSamlping(nn.Module):
+class DownSampling(nn.Module):
     def __init__(self, in_channels: int, out_channels: int):
         super().__init__()
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=2, padding=0)
@@ -88,9 +88,9 @@ class DownSamlping(nn.Module):
 
 
 class UpSampling(nn.Module):
-    def __init__(self, in_channels: int):
+    def __init__(self, in_channels: int, out_channels: int):
         super().__init__()
-        self.conv = nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1)
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
 
     def forward(self, X):
         X = nn.functional.interpolate(X, scale_factor=2.0, mode="nearest")
@@ -102,7 +102,7 @@ class EncoderBlock(nn.Module):
     def __init__(
         self,
         in_channels: int,
-        downsample_channels: int | None = None,
+        down_channels: int | None = None,
         num_groups: int = 1,
     ):
         super().__init__()
@@ -111,7 +111,7 @@ class EncoderBlock(nn.Module):
             ResidualBlock(in_channels, in_channels, num_groups),
             AttentionBlock(in_channels, num_groups),
         )
-        self.down = DownSamlping(in_channels, downsample_channels) if downsample_channels is not None else nn.Identity()
+        self.down = DownSampling(in_channels, down_channels) if down_channels is not None else nn.Identity()
 
     def forward(self, X):
         X = self.model(X)
@@ -123,53 +123,174 @@ class Encoder(nn.Module):
     def __init__(
         self,
         in_channels: int,
-        init_ch: int,
+        init_channels: int,
+        z_channels: int,
         ch_mult: list[int],
-        z_ch: int,
         num_groups: int = 1,
     ):
         super().__init__()
         # Initial Conv2d
-        self.conv_in = nn.Conv2d(in_channels, init_ch, kernel_size=3, stride=1, padding=1)
+        self.conv_in = nn.Conv2d(in_channels, init_channels, kernel_size=3, stride=1, padding=1)
 
         # Initialize Model
         num_stacks = len(ch_mult)
-        in_ch_mult = ch_mult * init_ch
-        out_ch_mult = ch_mult[1:] * init_ch + [None]
+        in_ch_mult = [mult * init_channels for mult in ch_mult]
+        out_ch_mult = in_ch_mult[1:] + [None]
 
         blocks = []
         for ch_in, ch_out in zip(in_ch_mult, out_ch_mult):
             blocks.append(EncoderBlock(ch_in, ch_out, num_groups))
-        self.model = nn.ModuleList(blocks)
+        self.model = nn.Sequential(*blocks)
 
-        # Predict Z_mean
+        # Predict z_mean
         end_ch = in_ch_mult[-1]
         self.z_mean = nn.Sequential(
             nn.GroupNorm(num_groups, end_ch),
-            nn.Conv2d(end_ch, z_ch, kernel_size=1, stride=1, padding=0),
+            nn.Conv2d(end_ch, z_channels, kernel_size=1, stride=1, padding=0),
         )
 
-        # Scalar log_var
-        self.logvar = nn.Parameter(torch.zeros())
+        # Scalar log_var of z
+        self.z_logvar = nn.Parameter(torch.zeros(()))
 
     def forward(self, X):
         X = self.conv_in(X)
         X = self.model(X)
         X = self.z_mean(X)
-        return X, self.logvar
+        return X, self.z_logvar
+
+
+class DecoderBlock(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        up_channels: int | None = None,
+        num_groups: int = 1,
+    ):
+        super().__init__()
+        self.model = nn.Sequential(
+            ResidualBlock(in_channels, in_channels, num_groups),
+            ResidualBlock(in_channels, in_channels, num_groups),
+            AttentionBlock(in_channels, num_groups),
+        )
+        self.up = UpSampling(in_channels, up_channels) if up_channels is not None else nn.Identity()
+
+    def forward(self, X):
+        X = self.model(X)
+        X = self.up(X)
+        return X
 
 
 class Decoder(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(
+        self,
+        in_channels: int,
+        init_channels: int,
+        x_channels: int,
+        ch_mult: list[int],
+        num_groups: int = 1,
+    ):
         super().__init__()
 
+        # Restore channels
+        self.conv_in = nn.Conv2d(in_channels, init_channels * ch_mult[-1], kernel_size=1, stride=1, padding=0)
+
+        # Initialize Model
+        in_ch_mult = ch_mult[::-1]
+        in_ch_mult = [mult * init_channels for mult in in_ch_mult]
+        out_ch_mult = in_ch_mult[1:] + [None]
+
+        blocks = []
+        for ch_in, ch_out in zip(in_ch_mult, out_ch_mult):
+            blocks.append(DecoderBlock(ch_in, ch_out, num_groups))
+        self.model = nn.Sequential(*blocks)
+
+        # Predict x_mean
+        end_ch = init_channels
+        self.x_mean = nn.Sequential(
+            nn.GroupNorm(num_groups, end_ch),
+            nn.Conv2d(end_ch, x_channels, kernel_size=1, stride=1, padding=0),
+        )
+
+        # Scalar log_var of x
+        self.x_logvar = nn.Parameter(torch.zeros(()))
+
     def forward(self, X):
-        pass
+        X = self.conv_in(X)
+        X = self.model(X)
+        X = self.x_mean(X)
+
+        return X, self.x_logvar
 
 
 class VAE(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=3, padding=1):
+    def __init__(
+        self,
+        in_channels: int,
+        init_channels: int,
+        z_channels: int,
+        x_channels: int,
+        ch_mult: list[int],
+        num_groups: int = 1,
+        shift_factor: float = 0,
+        scale_factor: float = 1,
+    ):
         super().__init__()
 
+        self._encoder = Encoder(
+            in_channels=in_channels,
+            init_channels=init_channels,
+            z_channels=z_channels,
+            ch_mult=ch_mult,
+            num_groups=num_groups,
+        )
+
+        self._decoder = Decoder(
+            in_channels=z_channels,
+            init_channels=init_channels,
+            x_channels=x_channels,
+            ch_mult=ch_mult,
+            num_groups=num_groups,
+        )
+
+        self.shift_factor = shift_factor
+        self.scale_factor = scale_factor
+
+    def encode(self, X):
+        return self._encoder(X)
+
+    def decode(self, X):
+        return self._decoder(X)
+
     def forward(self, X):
-        pass
+        z_mean, z_logvar = self.encode(X)
+        z = z_mean + torch.exp(0.5 * z_logvar) * torch.randn_like(z_mean)
+
+        # z = (z - self.shift_factor) / self.scale_factor
+
+        x_mean, x_logvar = self.decode(z)
+
+        # x_mean = x_mean / self.scale_factor + self.shift_factor
+        return z_mean, z_logvar, x_mean, x_logvar
+
+
+def vae_loss(
+    x_true: Tensor,
+    z_mean: Tensor,
+    z_logvar: Tensor,
+    x_mean: Tensor,
+    x_logvar: Tensor,
+    beta: float,
+):
+    eps = 1e-6
+    B = x_true.shape[0]
+    # Recon Loss
+    mse_term = ((x_true - x_mean).pow(2)) / torch.exp(x_logvar)
+    confidence_term = x_logvar
+    loss_recon = ((mse_term + confidence_term) / B).sum()
+
+    # KL Loss
+    loss_kl = ((z_mean.pow(2) + torch.exp(z_logvar) - z_logvar - 1) / B).sum()
+
+    loss_vae = loss_recon + beta * loss_kl
+
+    return loss_vae

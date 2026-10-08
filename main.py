@@ -12,7 +12,7 @@ from utils.ddp import new_ddp, delete_ddp
 from utils.logger import create_logger
 from utils.checkpoint import save_checkpoint, load_checkpoint
 from utils.metrics import iou_sum, dice_sum
-from models.unet import UNet
+from models.autoencoders.vae import UNet
 from lr_scheduler import warmup_cosine_decay
 
 
