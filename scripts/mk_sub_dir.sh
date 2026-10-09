@@ -1,3 +1,6 @@
+
+mkdir ./datasets/
+
 mkdir ./results
 mkdir ./results/checkpoints
 mkdir ./results/data_dump

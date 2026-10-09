@@ -1,9 +1,7 @@
 import math
-from config import Config
 
 
 def warmup_linear_decay(warmup_steps, total_steps):
-
     def lr_lambda(step):
         if step < warmup_steps:
             return step / warmup_steps
@@ -14,7 +12,6 @@ def warmup_linear_decay(warmup_steps, total_steps):
 
 
 def warmup_cosine_decay(warmup_steps, total_steps, min_lr_ratio=0.0):
-
     def lr_lambda(step):
         if step < warmup_steps:
             return (step + 1) / warmup_steps

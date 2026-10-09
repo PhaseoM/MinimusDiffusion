@@ -3,19 +3,19 @@ import pickle
 import torch.distributed as dist
 from torch import nn
 from tqdm import tqdm
-from config import Config, load_config
 from data.data_load import create_isic2016_dataloader
 from data.data_process import data_process
 from utils import unis
 from utils.ddp import new_ddp, delete_ddp
+from utils.config import load_config
 from utils.logger import create_logger
 from utils.checkpoint import save_checkpoint, load_checkpoint
+from utils.lr_scheduler import warmup_cosine_decay
 from models.autoencoders.vae import VAE, vae_loss
-from lr_scheduler import warmup_cosine_decay
 from engine import vae_engine
 
 
-def main(conf: Config):
+def main(conf):
     rank, local_rank, world_size, device = new_ddp(conf)
 
     logger = create_logger(conf.PATH.LOG_INFO, rank, name=conf.MODEL.NAME)

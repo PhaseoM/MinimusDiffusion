@@ -2,7 +2,6 @@ import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
-from config import Config
 from utils import unis
 from utils.data import roc_eval, roc_eval_multicls, loss_eval
 
@@ -36,7 +35,7 @@ def load_pkl_all(dump_folder: Path):
 
 # - - is train
 # --- is test
-def data_process(conf: Config):
+def data_process(conf):
     fig_arr = []
     model_name = Path(conf.MODEL.NAME)
     dump_folder = Path(conf.PATH.DATA_DUMP)

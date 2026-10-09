@@ -1,0 +1,53 @@
+MODEL:
+  NAME: "VAE"
+  RESUME: ""
+  NUM_LAYERS: 4
+  NUM_CLASSES: 2
+  BASE_CHANNELS: 64
+  DROP_RATE: 0.0
+  DROP_PATH_RATE: 0.1
+  LABEL_SMOOTHING: 0.1
+PATH:
+  CONFIGS: "./configs"
+  CURRENT_CONFIG: "${.CONFIGS}/default.yaml"
+  DATABASE: "./datasets"
+  DATASET: "${.DATABASE}/MM-CelebA-HQ"
+  RESULTS: "./data"
+  DATA_DUMP: "${.RESULTS}/data_dump"
+  DATA_EVAL: "${.RESULTS}/data_eval"
+  LOG_INFO: "${.RESULTS}/log_info"
+  CHECKPOINTS: "${.RESULTS}/checkpoints"
+DATA:
+  NAME: "MM-CelebA-HQ"
+  BATCH_SIZE: 16
+  IMAGE_SIZE: [256, 256]
+  IMAGE_CHANNELS: 3
+  MAIN_RANK: 0
+  AMP: true
+  WORLD_SIZE: 4
+  NUM_WORKERS: 4
+  AUG:
+    AUTO_AUGMENT: false
+OPTIM:
+  NAME: "adam"
+  BASE_LR: 8e-2
+  WARMUP_LR: 8e-4
+  WARMUP_STEP: 100
+  MOMENTUM: 0.9
+  BETAS: [0.9, 0.999]
+  WEIGHT_DECAY: 1e-4
+  DROPOUT: 0.1
+  EPS: 1e-8
+  SCHEDULER:
+    NAME: "multistep"
+TRAIN:
+  START_EPOCH: 0
+  EPOCHS: 100
+  SAVE_FREQ: 5
+TEST:
+  PARALLEL: false
+SEED: 42
+BETA: 0.5
+TRAIN_MODE: true
+EVAL_MODE: false
+PROCESS_MODE: false

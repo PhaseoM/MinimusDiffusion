@@ -1,11 +1,10 @@
 import torch
 import torch.distributed as dist
-from config import Config
-from ..models.autoencoders.vae import VAE, vae_loss
+from models.autoencoders.vae import VAE, vae_loss
 
 
 def train(
-    conf: Config,
+    conf,
     model,
     device,
     dataloader,
@@ -47,7 +46,7 @@ def train(
 
 @torch.no_grad()
 def validate(
-    conf: Config,
+    conf,
     device,
     dataloader,
     model,
@@ -62,7 +61,7 @@ def validate(
         y = y.to(device)
         with torch.amp.autocast(device_type="cuda", dtype=torch.float16, enabled=amp_enabled):
             z_mean, z_logvar, x_mean, x_logvar = model(X)
-            loss = vae_loss(X, z_mean, z_logvar, x_mean, x_logvar)
+            loss = vae_loss(X, z_mean, z_logvar, x_mean, x_logvar, conf.BETA)
 
         batch_size = y.size(0)
         val_loss += loss.detach() * batch_size
@@ -76,7 +75,7 @@ def validate(
 
 @torch.no_grad()
 def test(
-    conf: Config,
+    conf,
     device,
     model,
     dataloader,
@@ -90,7 +89,10 @@ def test(
         y = y.to(device)
 
         z_mean, z_logvar, x_mean, x_logvar = model(X)
-        test_loss = vae_loss(X, z_mean, z_logvar, x_mean, x_logvar)
+        loss = vae_loss(X, z_mean, z_logvar, x_mean, x_logvar, conf.BETA)
+
+        batch_size = y.size(0)
+        test_loss += loss.detach() * batch_size
 
     test_loss = (test_loss / size_n).item()
     return test_loss

@@ -1,10 +1,9 @@
 import os
 import torch
 import torch.distributed as dist
-from config import Config
 
 
-def new_ddp(conf: Config):
+def new_ddp(conf):
     if not torch.cuda.is_available():
         raise RuntimeError("DDP without CUDA")
 

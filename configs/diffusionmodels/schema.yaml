@@ -1,30 +1,22 @@
 MODEL:
-  NAME: "unet"
+  NAME: "DiT"
   RESUME: ""
   NUM_LAYERS: 4
   NUM_CLASSES: 2
   BASE_CHANNELS: 64
-  SKIP_PROCESS: "NULL" # NULL, ONE_RES, DUAL_RES
-  INCLUDE_BG: false
   DROP_RATE: 0.0
   DROP_PATH_RATE: 0.1
   LABEL_SMOOTHING: 0.1
 PATH:
-  ROOT: "."
-  PARENT: ".."
-  CONFIGS: "${.ROOT}/configs"
+  CONFIGS: "./configs"
   CURRENT_CONFIG: "${.CONFIGS}/default.yaml"
-  DATABASE: "${.PARENT}/datasets"
-  DATASET: "${.DATABASE}/ISIC2016"
-  TRAIN_DATA: "${.DATASET}/ISBI2016_ISIC_Part1_Training_Data"
-  TRAIN_GT: "${.DATASET}/ISBI2016_ISIC_Part1_Training_GroundTruth"
-  TEST_DATA: "${.DATASET}/ISBI2016_ISIC_Part1_Test_Data"
-  TEST_GT: "${.DATASET}/ISBI2016_ISIC_Part1_Test_GroundTruth"
-  DATA: "${.ROOT}/data"
-  DATA_DUMP: "${.DATA}/data_dump"
-  DATA_EVAL: "${.DATA}/data_eval"
-  LOG_INFO: "${.DATA}/log_info"
-  CHECKPOINTS: "${.DATA}/checkpoints"
+  DATABASE: "./datasets"
+  DATASET: "${.DATABASE}/MM-CelebA-HQ"
+  RESULTS: "./results"
+  DATA_DUMP: "${.RESULTS}/data_dump"
+  DATA_EVAL: "${.RESULTS}/data_eval"
+  LOG_INFO: "${.RESULTS}/log_info"
+  CHECKPOINTS: "${.RESULTS}/checkpoints"
 DATA:
   NAME: "ISIC2016"
   BATCH_SIZE: 16
