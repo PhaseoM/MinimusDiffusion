@@ -1,0 +1,53 @@
+main_rank: 0
+seed: 42
+beta: 0.5
+
+model:
+  name: "VAE"
+  resume: ""
+  num_layers: 4
+  num_classes: 2
+  init_channels: 64
+path:
+  config_dir: "./config"
+  config_path: "${.config_dir}/autoencoders/vae_default.yaml"
+  dataset_dir: "../datasets"
+  dataset_path: "${.dataset_dir}/MM-CelebA-HQ"
+  results_dir: "./results"
+  data_dump_dir: "${.results_dir}/data_dump"
+  data_eval_dir: "${.results_dir}/data_eval"
+  log_info_dir: "${.results_dir}/log_info"
+  checkpoint_dir: "${.results_dir}/checkpoints"
+data:
+  dataset_name: "MM-CelebA-HQ"
+  image_size: [256, 256]
+  image_channels: 3
+augs:
+  auto_augment: false
+optim:
+  name: "adam"
+  base_lr: 8e-2
+  warmup_lr: 8e-4
+  warmup_step: 100
+  momentum: 0.9
+  betas: [0.9, 0.999]
+  weight_decay: 1e-4
+  drop_out: 0.1
+  eps: 1e-8
+  scheduler:
+    name: "multistep"
+dist:
+  amp: true
+  world_size: 4
+  num_workers: 4
+train:
+  batch_size: 16
+  start_epoch: 0
+  epochs: 100
+  save_freq: 5
+test:
+  PARALLEL: false
+mode:
+  train: true
+  eval: false
+  process: false

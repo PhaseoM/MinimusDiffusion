@@ -8,7 +8,7 @@ from torch.utils.data.distributed import DistributedSampler
 
 
 def create_minist_dataloader(conf, rank):
-    image_size = tuple(conf.DATA.IMAGE_SIZE)
+    image_size = tuple(conf.data.image_size)
     transform_normal = v2.Compose([
         v2.ToImage(),
         v2.ToDtype(dtype=torch.float32, scale=True),
@@ -20,13 +20,13 @@ def create_minist_dataloader(conf, rank):
         v2.Resize(image_size, interpolation=InterpolationMode.BILINEAR, antialias=True),
     ])
     train_data = torchvision.datasets.MNIST(
-        root=conf.database + "/mnist/",
+        root=conf.path.dataset_path,
         train=True,
         download=True,
         transform=transform_augment,
     )
     test_data = torchvision.datasets.MNIST(
-        root=conf.database + "/mnist/",
+        root=conf.path.dataset_path,
         train=False,
         download=True,
         transform=transform_normal,
@@ -34,24 +34,24 @@ def create_minist_dataloader(conf, rank):
     train_sampler = DistributedSampler(
         train_data,
         rank=rank,
-        num_replicas=conf.DATA.WORLD_SIZE,
+        num_replicas=conf.dist.world_size,
         shuffle=True,
     )
     train_dataloader = DataLoader(
         dataset=train_data,
-        batch_size=conf.DATA.BATCH_SIZE,
+        batch_size=conf.train.batch_size,
         sampler=train_sampler,
-        num_workers=conf.DATA.NUM_WORKERS,
+        num_workers=conf.dist.num_workers,
         pin_memory=True,
-        persistent_workers=conf.DATA.NUM_WORKERS > 0,
+        persistent_workers=conf.dist.world_size > 0,
     )
     test_dataloader = DataLoader(
         dataset=test_data,
-        batch_size=conf.DATA.BATCH_SIZE,
+        batch_size=conf.train.batch_size,
         # sampler=test_sampler,
-        num_workers=conf.DATA.NUM_WORKERS,
+        num_workers=conf.dist.num_workers,
         pin_memory=True,
-        persistent_workers=conf.DATA.NUM_WORKERS > 0,
+        persistent_workers=conf.dist.world_size > 0,
     )
     return train_dataloader, test_dataloader, train_sampler
 
