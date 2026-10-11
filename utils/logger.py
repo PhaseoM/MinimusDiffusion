@@ -9,8 +9,7 @@ from termcolor import colored
 def create_logger(log_info_dir: str, dist_rank: int = 0, name: str = "") -> logging.Logger:
     # create dir
     output_dir = os.path.join(log_info_dir, name)
-    if not os.path.exists(output_dir):
-        os.mkdir(output_dir)
+    os.makedirs(output_dir, exist_ok=True)
 
     # create logger
     logger = logging.getLogger(name)

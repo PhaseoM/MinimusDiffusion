@@ -281,6 +281,9 @@ def vae_loss(
     x_logvar: Tensor,
     beta: float,
 ):
+    z_mean = z_mean.float()
+    z_logvar = z_logvar.float()
+
     eps = 1e-6
     B = x_true.shape[0]
     # Recon Loss

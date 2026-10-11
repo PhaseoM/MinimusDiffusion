@@ -29,7 +29,7 @@ def load_config(is_resolve=True, is_struct=True, is_readonly=False):
     # merge all the args
     config = OmegaConf.merge(schema, file_config, cli_config)
 
-    config.PATH.CURRENT_CONFIG = args.config
+    config.path.config_path = args.config
 
     # check for missing required fields
     missing = OmegaConf.missing_keys(config)

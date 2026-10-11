@@ -25,8 +25,7 @@ def train(
 
         with torch.amp.autocast(device_type="cuda", dtype=torch.float16, enabled=amp_enabled):
             z_mean, z_logvar, x_mean, x_logvar = model(X)
-            loss = vae_loss(X, z_mean, z_logvar, x_mean, x_logvar, conf.BETA)  # remember to revise
-
+            loss = vae_loss(X, z_mean, z_logvar, x_mean, x_logvar, conf.model.beta)
         batch_size = y.size(0)
 
         loss_scaler.scale(loss).backward()
@@ -47,9 +46,9 @@ def train(
 @torch.no_grad()
 def validate(
     conf,
+    model,
     device,
     dataloader,
-    model,
     amp_enabled,
 ):
     model.eval()
@@ -76,8 +75,8 @@ def validate(
 @torch.no_grad()
 def test(
     conf,
-    device,
     model,
+    device,
     dataloader,
 ):
     model.eval()

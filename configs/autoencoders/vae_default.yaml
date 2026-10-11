@@ -1,0 +1,56 @@
+seed: 42
+seed_everything: true
+auto_resume: false
+batch_size: 16
+save_freq: 5
+
+model:
+  name: "vae"
+  init_channels: 64
+  z_channels: 32
+  x_channels: 3
+  ch_mult: [1, 2, 4, 4]
+  shift_factor: 0
+  scale_factor: 1
+  num_groups: 1
+path:
+  config_dir: ./configs
+  config_path: ${.config_dir}/autoencoders/vae_default.yaml
+  dataset_dir: ./datasets
+  dataset_path: ${.dataset_dir}/MM-CelebA-HQ
+data:
+  dataset_name: "MM-CelebA-HQ"
+  val_ratio: 0.1
+  img_size: [256, 256]
+  img_channels: 3
+augs:
+  auto_augment: false
+optim:
+  name: "adam"
+  base_lr: 8e-2
+  warmup_lr: 8e-4
+  warmup_step: 100
+  momentum: 0.9
+  betas: [0.9, 0.999]
+  weight_decay: 1e-4
+  drop_out: 0.1
+  eps: 1e-8
+  scheduler:
+    name: "multistep"
+dist:
+  amp: true
+  main_rank: 0
+  world_size: 4
+  num_workers: 4
+train:
+  batch_size: ${batch_size}
+  start_epoch: 0
+  epochs: 100
+val:
+  batch_size: ${batch_size}
+test:
+  batch_size: ${batch_size}
+mode:
+  train: true
+  eval: false
+  process: false
