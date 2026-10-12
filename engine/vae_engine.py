@@ -1,6 +1,6 @@
 import torch
 import torch.distributed as dist
-from models.autoencoders.vae import VAE, vae_loss
+from models.autoencoders.vae_interleave import VAE, vae_loss
 
 
 def train(
@@ -60,7 +60,7 @@ def validate(
         y = y.to(device)
         with torch.amp.autocast(device_type="cuda", dtype=torch.float16, enabled=amp_enabled):
             z_mean, z_logvar, x_mean, x_logvar = model(X)
-            loss = vae_loss(X, z_mean, z_logvar, x_mean, x_logvar, conf.BETA)
+            loss = vae_loss(X, z_mean, z_logvar, x_mean, x_logvar, conf.model.beta)
 
         batch_size = y.size(0)
         val_loss += loss.detach() * batch_size
@@ -88,7 +88,7 @@ def test(
         y = y.to(device)
 
         z_mean, z_logvar, x_mean, x_logvar = model(X)
-        loss = vae_loss(X, z_mean, z_logvar, x_mean, x_logvar, conf.BETA)
+        loss = vae_loss(X, z_mean, z_logvar, x_mean, x_logvar, conf.model.beta)
 
         batch_size = y.size(0)
         test_loss += loss.detach() * batch_size

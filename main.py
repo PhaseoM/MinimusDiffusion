@@ -13,7 +13,7 @@ from utils.config import load_config
 from utils.logger import create_logger
 from utils.checkpoint import save_checkpoint, load_checkpoint
 from utils.lr_scheduler import warmup_cosine_decay
-from models.autoencoders.vae import VAE, vae_loss
+from models.autoencoders.vae_interleave import VAE, vae_loss
 from engine import vae_engine
 
 
@@ -115,17 +115,6 @@ def main(conf):
 
 if __name__ == "__main__":
     conf = load_config()
-    train_data = torchvision.datasets.MNIST(
-        root=conf.path.dataset_path,
-        train=True,
-        download=True,
-    )
-    test_data = torchvision.datasets.MNIST(
-        root=conf.path.dataset_path,
-        train=False,
-        download=True,
-    )
-    exit(0)
     if conf.mode.train:
         main(conf)
     if conf.mode.process:
