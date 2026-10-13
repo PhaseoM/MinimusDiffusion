@@ -11,7 +11,7 @@ from utils import unis
 from utils.ddp import new_ddp, delete_ddp
 from utils.config import load_config
 from utils.logger import create_logger
-from utils.checkpoint import save_checkpoint, load_checkpoint
+from utils.checkpoint import save_ckpt, load_ckpt, save_best_ckpt
 from utils.lr_scheduler import warmup_cosine_decay
 from models.autoencoders.vae_interleave import VAE, vae_loss
 from engine import vae_engine
