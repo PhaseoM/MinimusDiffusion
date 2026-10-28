@@ -1,62 +1,46 @@
 import os
 import torch
+from omegaconf import OmegaConf
+from pathlib import Path
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 
-def load_ckpt(config, model, optimizer, lr_scheduler, loss_scaler, logger):
-    resume_path = config.path.resume_path
+def load_ckpt(resume_path, model, optimizer, lr_scheduler, loss_scaler, logger):
     logger.info(f"==============> Resuming from {resume_path}....................")
-    if resume_path.startswith("https"):
-        checkpoint = torch.hub.load_state_dict_from_url(resume_path, map_location="cpu", check_hash=True)
-    else:
-        checkpoint = torch.load(resume_path, map_location="cpu")
-    msg = model.load_state_dict(checkpoint["model"], strict=False)
+
+    checkpoint = torch.load(resume_path, map_location="cpu", weights_only=True)
+
+    raw_model = model.module if isinstance(model, DDP) else model
+    msg = raw_model.load_state_dict(checkpoint["model"], strict=False)
     logger.info(msg)
-    max_metric = 0.0
-    if "optimizer" in checkpoint and "lr_scheduler" in checkpoint and "epoch" in checkpoint:
-        optimizer.load_state_dict(checkpoint["optimizer"])
-        lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
-        config.train.start_epoch = checkpoint["epoch"] + 1
-        if "scaler" in checkpoint:
-            loss_scaler.load_state_dict(checkpoint["scaler"])
-        logger.info(f"=> loaded successfully '{resume_path}' (epoch {checkpoint['epoch']})")
-        if "max_metric" in checkpoint:
-            max_metric = checkpoint["max_metric"]
 
-    del checkpoint
-    torch.cuda.empty_cache()
-    return max_metric
+    optimizer.load_state_dict(checkpoint["optimizer"])
+    lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
+    loss_scaler.load_state_dict(checkpoint["scaler"])
+
+    logger.info(f"=> loaded successfully '{resume_path}' (epoch {checkpoint['epoch']})")
+
+    return checkpoint["epoch"] + 1, checkpoint["history"]
 
 
-def save_ckpt(config, epoch, model, max_metric, optimizer, lr_scheduler, loss_scaler, logger):
+def save_ckpt(config, epoch, model, optimizer, lr_scheduler, loss_scaler, model_kwargs, history, logger):
+    raw_model = model.module if isinstance(model, DDP) else model
+
     save_state = {
-        "model": model.state_dict(),
+        "model": raw_model.state_dict(),
         "optimizer": optimizer.state_dict(),
         "lr_scheduler": lr_scheduler.state_dict(),
         "scaler": loss_scaler.state_dict(),
-        "max_metric": max_metric,
         "epoch": epoch,
-        "config": config,
+        "config": OmegaConf.to_container(config, resolve=True),
+        "model_kwargs": model_kwargs,
+        "history": history,
     }
 
-    save_path = os.path.join(config.OUTPUT, f"ckpt_epoch_{epoch}.pth")
-    logger.info(f"{save_path} saving......")
+    save_path = Path(config.path.ckpt_path) / f"ckpt_epoch_{epoch + 1:04d}.pth"
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    logger.info(f"{save_path} saving...")
     torch.save(save_state, save_path)
-    logger.info(f"{save_path} saved !!!")
+    logger.info(f"{save_path} saved !")
 
-
-def save_best_ckpt(config, epoch, model, max_metric, optimizer, lr_scheduler, loss_scaler, logger):
-    save_state = {
-        "model": model.state_dict(),
-        "optimizer": optimizer.state_dict(),
-        "lr_scheduler": lr_scheduler.state_dict(),
-        "scaler": loss_scaler.state_dict(),
-        "max_metric": max_metric,
-        "epoch": epoch,
-        "config": config,
-    }
-
-    os.makedirs(config.path.ckpt_dir, exist_ok=True)
-    save_path = os.path.join(config.path.ckpt_dir, "best_ckpt.pth")
-    logger.info(f"{save_path} best checkpoint is saving......")
-    torch.save(save_state, save_path)
-    logger.info(f"{save_path} best checkpoint is saved !!!")
+    return save_path

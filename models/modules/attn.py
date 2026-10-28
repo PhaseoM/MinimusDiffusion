@@ -1,24 +1,6 @@
 import torch
-from torch import nn
-import torch.nn.functional as nnF
-
-
-# class ScaledDotAttention(nn.Module):
-#     def __init__(self, masked=False):
-#         super().__init__()
-#         self.masked = masked
-
-
-#     def forward(self, Q_, K_, V_):
-#         seq_len = Q_.shape[-2]
-#         scale = Q_.shape[-1] ** 0.5
-#         att_score = torch.matmul(Q_, K_.transpose(-2, -1)) / scale
-#         if self.masked is True:
-#             causal_mask = torch.ones(seq_len, seq_len, dtype=torch.bool, device=att_score.device).triu(diagonal=1)
-#             att_score = att_score.masked_fill(causal_mask, -torch.inf)
-#         att_score = nnF.softmax(att_score, dim=-1)
-#         att_score = torch.matmul(att_score, V_)
-#         return att_score
+from torch import nn, Tensor
+from einops import rearrange
 
 
 class ScaledDotAttention(nn.Module):
@@ -27,7 +9,7 @@ class ScaledDotAttention(nn.Module):
         self.masked = masked
 
     def forward(self, Q_, K_, V_):
-        return nnF.scaled_dot_product_attention(Q_, K_, V_, is_causal=self.masked)
+        return nn.functional.scaled_dot_product_attention(Q_, K_, V_, is_causal=self.masked)
 
 
 class MultiHeadAttention(nn.Module):
@@ -62,7 +44,34 @@ class MultiHeadAttention(nn.Module):
         return X
 
 
-class AttentionBlock(nn.Module):
+class ImageAttentionBlock(nn.Module):
+    def __init__(self, in_channels: int, num_groups: int = 1):
+        super().__init__()
+
+        self.norm = nn.GroupNorm(num_groups, in_channels)
+        self.w_q = nn.Conv2d(in_channels=in_channels, out_channels=in_channels, kernel_size=1, stride=1, padding=0)
+        self.w_k = nn.Conv2d(in_channels=in_channels, out_channels=in_channels, kernel_size=1, stride=1, padding=0)
+        self.w_v = nn.Conv2d(in_channels=in_channels, out_channels=in_channels, kernel_size=1, stride=1, padding=0)
+        self.w_o = nn.Conv2d(in_channels=in_channels, out_channels=in_channels, kernel_size=1, stride=1, padding=0)
+
+    def forward(self, X: Tensor) -> Tensor:
+        identity = X
+        X = self.norm(X)
+        q = self.w_q(X)
+        k = self.w_k(X)
+        v = self.w_v(X)
+
+        b, c, h, w = q.shape
+        q = rearrange(q, "b c h w -> b 1 (h w) c").contiguous()
+        k = rearrange(k, "b c h w -> b 1 (h w) c").contiguous()
+        v = rearrange(v, "b c h w -> b 1 (h w) c").contiguous()
+        attn = nn.functional.scaled_dot_product_attention(q, k, v)
+
+        attn = self.w_o(rearrange(attn, "b 1 (h w) c -> b c h w", b=b, c=c, h=h, w=w))
+        return identity + attn
+
+
+class ViTBlock(nn.Module):
     def __init__(
         self,
         num_heads=8,
@@ -114,7 +123,7 @@ class AttentionStack(nn.Module):
         attn_stack = []
         for _ in range(num_layers):
             attn_stack.append(
-                AttentionBlock(
+                ViTBlock(
                     num_heads=num_heads,
                     d_model=d_model,
                     mlp_hiddens=mlp_hiddens,

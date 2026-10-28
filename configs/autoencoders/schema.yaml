@@ -1,6 +1,6 @@
 seed: 42
 seed_everything: true
-resume: false
+auto_resume: false
 batch_size: 16
 save_freq: 5
 
@@ -30,6 +30,7 @@ path:
   data_eval_dir: ${.results_dir}/data_eval
   log_info_dir: ${.results_dir}/log_info
   ckpt_dir: ${.results_dir}/ckpts
+  ckpt_path: ${.ckpt_dir}/vae
   resume_path: ${.ckpt_dir}/best_ckpt.pth
 data:
   dataset_name: "unknown_dataset_name"

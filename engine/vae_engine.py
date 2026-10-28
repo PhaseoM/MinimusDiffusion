@@ -1,6 +1,7 @@
 import torch
 import torch.distributed as dist
-from models.autoencoders.vae_interleave import VAE, vae_loss
+from metrics.losses import vae_loss
+from models.autoencoders.vae_midattn import VAE
 
 
 def train(
@@ -17,16 +18,16 @@ def train(
     train_loss = torch.zeros(1, device=device)
     sample_count = torch.zeros(1, device=device)
 
-    for batch, (X, y) in enumerate(dataloader):
+    for X, y in dataloader:
         X = X.to(device, non_blocking=True)
-        y = y.to(device, non_blocking=True)
+        # y = y.to(device, non_blocking=True)
 
         optimizer.zero_grad(set_to_none=True)
 
         with torch.amp.autocast(device_type="cuda", dtype=torch.float16, enabled=amp_enabled):
             z_mean, z_logvar, x_mean, x_logvar = model(X)
             loss = vae_loss(X, z_mean, z_logvar, x_mean, x_logvar, conf.model.beta)
-        batch_size = y.size(0)
+        batch_size = X.size(0)
 
         loss_scaler.scale(loss).backward()
         loss_scaler.step(optimizer)
@@ -57,12 +58,12 @@ def validate(
 
     for X, y in dataloader:
         X = X.to(device)
-        y = y.to(device)
+        # y = y.to(device)
         with torch.amp.autocast(device_type="cuda", dtype=torch.float16, enabled=amp_enabled):
             z_mean, z_logvar, x_mean, x_logvar = model(X)
             loss = vae_loss(X, z_mean, z_logvar, x_mean, x_logvar, conf.model.beta)
 
-        batch_size = y.size(0)
+        batch_size = X.size(0)
         val_loss += loss.detach() * batch_size
         sample_count += batch_size
 
@@ -85,12 +86,12 @@ def test(
     size_n = len(dataloader.dataset)
     for X, y in dataloader:
         X = X.to(device)
-        y = y.to(device)
+        # y = y.to(device)
 
         z_mean, z_logvar, x_mean, x_logvar = model(X)
         loss = vae_loss(X, z_mean, z_logvar, x_mean, x_logvar, conf.model.beta)
 
-        batch_size = y.size(0)
+        batch_size = X.size(0)
         test_loss += loss.detach() * batch_size
 
     test_loss = (test_loss / size_n).item()
