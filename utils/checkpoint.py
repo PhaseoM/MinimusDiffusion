@@ -37,7 +37,7 @@ def save_ckpt(config, epoch, model, optimizer, lr_scheduler, loss_scaler, model_
         "history": history,
     }
 
-    save_path = Path(config.path.ckpt_path) / f"ckpt_epoch_{epoch + 1:04d}.pth"
+    save_path = Path(config.path.ckpts_dir) / f"ckpt_epoch_{epoch + 1:04d}.pth"
     save_path.parent.mkdir(parents=True, exist_ok=True)
     logger.info(f"{save_path} saving...")
     torch.save(save_state, save_path)

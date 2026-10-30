@@ -1,12 +1,14 @@
 seed: 42
 seed_everything: true
 auto_resume: false
-beta: 0.5
 batch_size: 16
 save_freq: 5
+timestamp: ${now:%Y-%m-%d_%H-%M-%S}
 
 model:
-  name: "unknown"
+  name: "DiT"
+  fullname: ${.name}_${timestamp}
+  beta: 0.5
   num_layers: 1
   d_model: 512
   num_head: 1
@@ -22,11 +24,18 @@ model:
   num_groups: 1
 path:
   config_dir: ./configs
-  config_path: ${.config_dir}/autoencoders/vae_default.yaml
-  dataset_dir: ../datasets
+  config_path: ${.config_dir}/autoencoders/dit_default.yaml
+  dataset_dir: ./datasets
   dataset_path: ${.dataset_dir}/MM-CelebA-HQ
+  results_dir: ./results
+  output_dir: ${.results_dir}/${model.fullname}
+  ckpts_dir: ${.output_dir}/ckpts
+  data_dump_dir: ${.output_dir}/data_dump
+  logs_dir: ${.output_dir}/logs
+  resume_path: ${.ckpts_dir}/ckpt_epoch_0005.pth
+  eval_load_path: ${.ckpts_dir}/best_ckpt.pth
 data:
-  dataset_name: "MM-CelebA-HQ"
+  dataset_name: "unknown_dataset_name"
   val_ratio: 0.1
   img_size: [256, 256]
   img_channels: 3
@@ -34,9 +43,9 @@ augs:
   auto_augment: false
 optim:
   name: "adam"
-  base_lr: 8e-2
+  base_lr: 1e-4
   warmup_lr: 8e-4
-  warmup_step: 100
+  warmup_step: 300
   momentum: 0.9
   betas: [0.9, 0.999]
   weight_decay: 1e-4

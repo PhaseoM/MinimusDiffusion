@@ -2,10 +2,11 @@ seed: 42
 seed_everything: true
 auto_resume: false
 batch_size: 16
-save_freq: 5
+save_freq: 10
 
 model:
-  name: "vae"
+  name: "VAE"
+  beta: 0.5
   init_channels: 64
   z_channels: 32
   x_channels: 3
@@ -18,9 +19,7 @@ path:
   config_path: ${.config_dir}/autoencoders/vae_mmchq_z32_init64.yaml
   dataset_dir: ./datasets
   dataset_path: ${.dataset_dir}/mm-celeba-hq
-  ckpt_dir: ${.results_dir}/ckpts
-  ckpt_path: ${.ckpt_dir}/vae
-  resume_path: ${.ckpt_path}/best_ckpt.pth
+  resume_path: ${.ckpts_dir}/best_ckpt.pth
 data:
   dataset_name: "MM-CelebA-HQ"
   val_ratio: 0.1
@@ -30,9 +29,9 @@ augs:
   auto_augment: false
 optim:
   name: "adam"
-  base_lr: 8e-2
-  warmup_lr: 8e-4
-  warmup_step: 100
+  base_lr: 1e-4
+  warmup_lr: 2e-4
+  warmup_step: 300
   momentum: 0.9
   betas: [0.9, 0.999]
   weight_decay: 1e-4

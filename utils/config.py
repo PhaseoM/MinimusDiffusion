@@ -1,6 +1,15 @@
 import argparse
+from datetime import datetime
 from omegaconf import OmegaConf
 from pathlib import Path
+
+
+def resolver_preload():
+    OmegaConf.register_new_resolver(
+        "now",
+        lambda fmt: datetime.now().strftime(fmt),
+        use_cache=True,
+    )
 
 
 def parse_option():
@@ -14,6 +23,7 @@ def parse_option():
 
 
 def load_config(is_resolve=True, is_struct=True, is_readonly=False):
+    resolver_preload()
     args, unknown = parse_option()
 
     schema_path = args.schema

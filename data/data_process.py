@@ -35,12 +35,12 @@ def load_pkl_all(dump_folder: Path):
 
 # - - is train
 # --- is test
-def data_process(conf):
+def data_process(config):
     fig_arr = []
-    model_name = Path(conf.MODEL.NAME)
-    dump_folder = Path(conf.PATH.DATA_DUMP)
+    model_name = Path(config.MODEL.NAME)
+    dump_folder = Path(config.PATH.DATA_DUMP)
     dump_file = dump_folder / Path(str(model_name) + ".pkl")
-    eval_path = Path(conf.PATH.DATA_EVAL)
+    eval_path = Path(config.PATH.DATA_EVAL)
     eval_folder = eval_path / model_name
 
     dump_lists = load_pkl(dump_file)

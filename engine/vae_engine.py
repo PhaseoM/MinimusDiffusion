@@ -5,7 +5,7 @@ from models.autoencoders.vae_midattn import VAE
 
 
 def train(
-    conf,
+    config,
     model,
     device,
     dataloader,
@@ -26,13 +26,21 @@ def train(
 
         with torch.amp.autocast(device_type="cuda", dtype=torch.float16, enabled=amp_enabled):
             z_mean, z_logvar, x_mean, x_logvar = model(X)
-            loss = vae_loss(X, z_mean, z_logvar, x_mean, x_logvar, conf.model.beta)
+            loss = vae_loss(X, z_mean, z_logvar, x_mean, x_logvar, config.model.beta)
         batch_size = X.size(0)
 
+        # loss backward with Gradient Scaling
         loss_scaler.scale(loss).backward()
+        loss_scaler.unscale_(optimizer)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+
+        # Gradient Clipping
+        scale_before = loss_scaler.get_scale()
         loss_scaler.step(optimizer)
         loss_scaler.update()
-        scheduler.step()
+
+        if loss_scaler.get_scale() >= scale_before:
+            scheduler.step()
 
         train_loss += loss.detach() * batch_size
         sample_count += batch_size
@@ -46,7 +54,7 @@ def train(
 
 @torch.no_grad()
 def validate(
-    conf,
+    config,
     model,
     device,
     dataloader,
@@ -61,7 +69,7 @@ def validate(
         # y = y.to(device)
         with torch.amp.autocast(device_type="cuda", dtype=torch.float16, enabled=amp_enabled):
             z_mean, z_logvar, x_mean, x_logvar = model(X)
-            loss = vae_loss(X, z_mean, z_logvar, x_mean, x_logvar, conf.model.beta)
+            loss = vae_loss(X, z_mean, z_logvar, x_mean, x_logvar, config.model.beta)
 
         batch_size = X.size(0)
         val_loss += loss.detach() * batch_size
@@ -75,7 +83,7 @@ def validate(
 
 @torch.no_grad()
 def test(
-    conf,
+    config,
     model,
     device,
     dataloader,
@@ -89,7 +97,7 @@ def test(
         # y = y.to(device)
 
         z_mean, z_logvar, x_mean, x_logvar = model(X)
-        loss = vae_loss(X, z_mean, z_logvar, x_mean, x_logvar, conf.model.beta)
+        loss = vae_loss(X, z_mean, z_logvar, x_mean, x_logvar, config.model.beta)
 
         batch_size = X.size(0)
         test_loss += loss.detach() * batch_size

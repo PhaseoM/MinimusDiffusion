@@ -3,9 +3,11 @@ seed_everything: true
 auto_resume: false
 batch_size: 16
 save_freq: 5
+timestamp: ${now:%Y-%m-%d_%H-%M-%S}
 
 model:
-  name: "vae"
+  name: "VAE"
+  fullname: ${.name}_${timestamp}
   beta: 0.5
   num_layers: 1
   d_model: 512
@@ -26,12 +28,12 @@ path:
   dataset_dir: ./datasets
   dataset_path: ${.dataset_dir}/MM-CelebA-HQ
   results_dir: ./results
-  data_dump_dir: ${.results_dir}/data_dump
-  data_eval_dir: ${.results_dir}/data_eval
-  log_info_dir: ${.results_dir}/log_info
-  ckpt_dir: ${.results_dir}/ckpts
-  ckpt_path: ${.ckpt_dir}/vae
-  resume_path: ${.ckpt_dir}/best_ckpt.pth
+  output_dir: ${.results_dir}/${model.fullname}
+  ckpts_dir: ${.output_dir}/ckpts
+  data_dump_dir: ${.output_dir}/data_dump
+  logs_dir: ${.output_dir}/logs
+  resume_path: ${.ckpts_dir}/ckpt_epoch_0005.pth
+  eval_load_path: ${.ckpts_dir}/best_ckpt.pth
 data:
   dataset_name: "unknown_dataset_name"
   val_ratio: 0.1

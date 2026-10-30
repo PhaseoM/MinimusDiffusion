@@ -6,9 +6,9 @@ from termcolor import colored
 
 
 @functools.lru_cache()
-def create_logger(log_info_dir: str, dist_rank: int = 0, name: str = "") -> logging.Logger:
+def create_logger(logs_dir: str, dist_rank: int = 0, name: str = "") -> logging.Logger:
     # create dir
-    output_dir = os.path.join(log_info_dir, name)
+    output_dir = os.path.join(logs_dir, name)
     os.makedirs(output_dir, exist_ok=True)
 
     # create logger
