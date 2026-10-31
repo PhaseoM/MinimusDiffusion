@@ -4,19 +4,23 @@ auto_resume: false
 batch_size: 16
 save_freq: 5
 timestamp: ${now:%Y-%m-%d_%H-%M-%S}
+eps: 0.001
 
 model:
   name: "DiT"
+  text_encoder_name: "openai/clip-vit-base-patch32"
   fullname: ${.name}_${timestamp}
-  beta: 0.5
-  num_layers: 1
+  beta: 0.01
+  num_layers: 4
   d_model: 512
-  num_head: 1
+  num_heads: 1
   mlp_hiddens: 2048
   patch_size: 4
+  final_dim: 16
+  z_img_size: 32
 
   init_channels: 64
-  z_channels: 32
+  z_channels: 8
   x_channels: 3
   ch_mult: [1, 2, 4, 4]
   shift_factor: 0
@@ -34,8 +38,11 @@ path:
   logs_dir: ${.output_dir}/logs
   resume_path: ${.ckpts_dir}/ckpt_epoch_0005.pth
   eval_load_path: ${.ckpts_dir}/best_ckpt.pth
+  text_encoder_path: "./pretrained/clip-vit-base-patch32"
+  vae_ckpt_path: "./results/VAE_mmchq_f8c8_betae-1/ckpts/ckpt_epoch_0100.pth"
 data:
   dataset_name: "unknown_dataset_name"
+  prompt_drop_rate: 0.1
   val_ratio: 0.1
   img_size: [256, 256]
   img_channels: 3

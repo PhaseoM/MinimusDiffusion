@@ -1,11 +1,16 @@
-"""Compare the three current VAE ablations with paper-style reconstruction metrics.
+r"""Compare VAE ablations with paper-style reconstruction and latent metrics.
 
     python vae_experiments_compare.py --device cuda:3
     python vae_experiments_compare.py --device cuda:3 --max-samples 256
     python vae_experiments_compare.py --device cuda:3 --output-dir results/my_comparison
     python vae_experiments_compare.py --from-report results/existing_comparison.html
+    python vae_experiments_compare.py --device cuda:3 \
+        --base-results results/vae_three_experiments_comparison_20261030/metrics.json \
+        --append-run results/VAE_20261030_165055
 
 Ordered experiments: (z_channels=32, beta=.5), (8, .5), (8, .01).
+Use --append-run to add C8 beta ablations. --base-results reuses compatible
+evaluations after checking image IDs, settings, metric hashes and sample scores.
 The same frozen epoch (default 100) and training data split are required.
 Both posterior-sampled and posterior-mean reconstruction are evaluated. Metrics
 include reconstruction FID (official pytorch-fid 2048-D FID Inception), LPIPS
@@ -24,7 +29,7 @@ Full test N=3000 is preferred; subset rFID has substantial finite-sample bias.
 
 def interpretation_appendix(payload):
     """Describe measured reconstruction/prior trade-offs without equating KL to MI."""
-    a, b, c = payload["experiments"]
+    a, b, c = payload["experiments"][:3]
     lb, lc = b["latent"], c["latent"]
     eb = b["modes"]["sample"]["negative_elbo_nats_per_image_mc"]
     ec = c["modes"]["sample"]["negative_elbo_nats_per_image_mc"]
@@ -45,6 +50,62 @@ def interpretation_appendix(payload):
     此处测试集标准差只用于诊断，不用于拟合训练预处理。
     标量缩放不会消除通道相关性和非高斯结构，且潜分布偏离标准正态并不等于扩散模型无法学习。
     标准差缩放可参考 <a href="https://github.com/CompVis/latent-diffusion/blob/main/ldm/models/diffusion/ddpm.py">LDM 官方 scale_by_std 实现</a>。</p></div>"""
+
+
+def beta_sweep_appendix(payload):
+    """Add the intermediate-beta comparison when additional C8 runs are present."""
+    experiments = payload["experiments"]
+    if len(experiments) <= 3:
+        return ""
+    sweep = sorted((r for r in experiments if r["z_channels"] == 8), key=lambda r: r["beta"], reverse=True)
+    rows = []
+    for r in sweep:
+        m, latent = r["modes"]["sample"], r["latent"]
+        rows.append(
+            f"<tr><td>{r['label'].split(':')[0]}</td><td>{r['beta']:g}</td>"
+            f"<td>{m['rfid_2048']:.4f}</td><td>{m['psnr_db']['mean']:.3f}</td>"
+            f"<td>{m['ssim']['mean']:.4f}</td><td>{m['lpips_alex_v01']['mean']:.4f}</td>"
+            f"<td>{latent['conditional_kl_nats_per_latent']:.5f}</td>"
+            f"<td>{latent['aggregate_pooled_std']:.5f}</td>"
+            f"<td>{latent['aggregate_diagonal_gaussian_moment_kl_nats_per_latent']:.5f}</td>"
+            f"<td>{latent['channel_correlation_max_abs']:.5f}</td></tr>"
+        )
+    descriptions = []
+    for added in experiments[3:]:
+        label = added["label"].split(":")[0]
+        for reference in experiments[1:3]:
+            for mode in ["sample", "mean"]:
+                a, b = reference["modes"][mode], added["modes"][mode]
+                descriptions.append(
+                    f"<p>{label}（β={added['beta']:g}）相对 {reference['label'].split(':')[0]}"
+                    f"（β={reference['beta']:g}），{mode} 模式："
+                    f"PSNR {b['psnr_db']['mean']-a['psnr_db']['mean']:+.3f} dB，"
+                    f"SSIM {b['ssim']['mean']-a['ssim']['mean']:+.4f}，"
+                    f"LPIPS {b['lpips_alex_v01']['mean']-a['lpips_alex_v01']['mean']:+.4f}，"
+                    f"rFID {b['rfid_2048']-a['rfid_2048']:+.4f}，"
+                    f"MSE 相对变化 {100*(b['mse_01']['mean']/a['mse_01']['mean']-1):+.2f}%。</p>"
+                )
+        l, ref_l = added["latent"], experiments[2]["latent"]
+        descriptions.append(
+            f"<p>{label} 的后验噪声方差为 {l['posterior_z_variance']:.6f}，"
+            f"聚合标准差为 {l['aggregate_pooled_std']:.5f}，逐坐标高斯 KL 代理为 "
+            f"{l['aggregate_diagonal_gaussian_moment_kl_nats_per_latent']:.5f} nats/latent，"
+            f"最大通道相关绝对值为 {l['channel_correlation_max_abs']:.5f}。"
+            f"对照 C（β=0.01）的后三项：{ref_l['aggregate_pooled_std']:.5f}、"
+            f"{ref_l['aggregate_diagonal_gaussian_moment_kl_nats_per_latent']:.5f}、"
+            f"{ref_l['channel_correlation_max_abs']:.5f}。这些实测值与重建表共同描述工作点，"
+            "不能只按 β 大小预设最优结论。</p>"
+        )
+    return (
+        '<section id="beta-sweep"><h2>新增实验：固定 C8 的 β 扫描</h2>'
+        '<div class="scroll"><table><tr><th>实验</th><th>β</th><th>rFID ↓</th><th>PSNR ↑</th>'
+        '<th>SSIM ↑</th><th>LPIPS ↓</th><th>KL / latent</th><th>聚合 std</th>'
+        '<th>高斯 KL 代理 / latent</th><th>最大 |corr|</th></tr>'
+        + ''.join(rows) + '</table></div>' + ''.join(descriptions)
+        + '<p>该表把同一架构的 β 按降序排列。聚合 std 的标准正态目标为 1，'
+        '高斯矩匹配代理与相关性仅为先验匹配诊断；最终 LDM 效果仍需单独验证。'
+        '新增配对差及其测试样本区间列于下一节。</p></section>'
+    )
 
 
 def export_comparison_report(input_report, output_dir=None):
@@ -82,6 +143,8 @@ def export_comparison_report(input_report, output_dir=None):
     )
     if 'id="prior-tradeoff"' not in document:
         document = document.replace("<h2>7.", interpretation_appendix(payload) + "<h2>7.", 1)
+    if 'id="beta-sweep"' not in document and len(payload["experiments"]) > 3:
+        document = document.replace("<h2>7.", beta_sweep_appendix(payload) + "<h2>7.", 1)
     (destination / "report.html").write_text(document, encoding="utf-8")
     (destination / "metrics.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8")
     (destination / "summary.csv").write_bytes(download_content("vae_comparison.csv"))
@@ -127,9 +190,15 @@ def main():
     parser.add_argument("--seed",type=int,default=20261030)
     parser.add_argument("--output-dir",help="A NEW output directory; existing directories are refused")
     parser.add_argument("--from-report",help="Export an existing comparison HTML without recomputing metrics")
+    parser.add_argument("--append-run",action="append",default=[],help="Additional C8 beta-ablation run; repeat to add multiple runs")
+    parser.add_argument("--base-results",help="Existing metrics.json for compatible evaluated runs; new runs are evaluated in full")
     args=parser.parse_args()
     if args.epoch<=0 or args.batch_size<=0 or args.seed<0 or (args.max_samples is not None and args.max_samples<2):
         parser.error("epoch/batch-size must be positive, seed nonnegative, max-samples at least 2")
+    if args.from_report and (args.append_run or args.base_results):
+        parser.error("--from-report cannot be combined with evaluation/cache options")
+    if len(args.append_run)>23:
+        parser.error("At most 23 additional runs can be labelled D through Z")
     if args.from_report:
         export_comparison_report(args.from_report,args.output_dir)
         return
@@ -149,11 +218,20 @@ def main():
     import torchvision
     from PIL import Image
     from torch.utils.data import DataLoader,Subset
-    from models.autoencoders.vae_midattn import VAE
     from vae_eval import _ImageDataset,_image_transform,_ssim
 
     ROOT=Path(__file__).resolve().parent
-    OUTPUT_DIR=Path(args.output_dir).resolve() if args.output_dir else ROOT/"results"/f"vae_three_experiments_comparison_{datetime.now():%Y%m%d_%H%M%S_%f}"
+    # Load the unchanged VAE source without unrelated model-package initializers.
+    # The private namespace preserves relative imports and leaves training imports alone.
+    for suffix,relative in [("", "models"),(".modules", "models/modules"),(".autoencoders", "models/autoencoders")]:
+        name="_vae_comparison_models"+suffix
+        package=types.ModuleType(name)
+        package.__path__=[str(ROOT/relative)]
+        package.__package__=name
+        sys.modules[name]=package
+    from _vae_comparison_models.autoencoders.vae_midattn import VAE
+
+    OUTPUT_DIR=Path(args.output_dir).resolve() if args.output_dir else ROOT/"results"/f"vae_experiments_comparison_{datetime.now():%Y%m%d_%H%M%S_%f}"
     OUTPUT_DIR.mkdir(parents=True,exist_ok=False)
     OUTPUT=OUTPUT_DIR/"report.html"
     # Allow writes only inside the newly created results directory.
@@ -177,17 +255,53 @@ def main():
     torch.backends.cudnn.allow_tf32=False
     SEED=args.seed
     BATCH=args.batch_size
-    RUNS=args.run_dirs
+    RUNS=args.run_dirs+args.append_run
     LABELS=["A: C32 beta0.5","B: C8 beta0.5","C: C8 beta0.01"]
+    cached_payload=None
+    cache_index={}
+    cache_checks={}
+    if args.base_results:
+        cached_payload=json.loads(Path(args.base_results).read_text(encoding="utf-8"))
+        cache_index={str(Path(r["checkpoint"]).resolve()):r for r in cached_payload["experiments"]}
+        if cached_payload["protocol"]["torch"]!=torch.__version__ or cached_payload["protocol"]["torchvision"]!=torchvision.__version__:
+            raise ValueError("Cached metric library versions differ; recompute instead of reusing")
+        if cached_payload["protocol"]["posterior_seed_base"]!=SEED:
+            raise ValueError("Cached posterior seed differs")
+        if cached_payload["protocol"]["batch_size"]!=BATCH:
+            raise ValueError("Use the same batch size as the cached protocol")
+    for index,run in enumerate(args.append_run):
+        path=Path(run)
+        if not path.is_absolute():path=ROOT/path
+        ck=torch.load(path/"ckpts"/f"ckpt_epoch_{args.epoch:04d}.pth",map_location="cpu",weights_only=True,mmap=True)
+        if ck["model_kwargs"]["z_channels"]!=8:
+            raise ValueError("--append-run currently supports the C8 beta-ablation family")
+        LABELS.append(f"{chr(68+index)}: C8 beta{ck['config']['model']['beta']:g}")
+        del ck
     download_manifest={}
     def fetch(url,expected_prefix=None):
         print("[fetch]",url,flush=True)
         request=urllib.request.Request(url,headers={"User-Agent":"MinimusDiffusion-readonly-evaluation"})
-        with urllib.request.urlopen(request,timeout=90) as response:
-            data=response.read()
+        for attempt in range(1,4):
+            try:
+                # Retry the official HTTPS URL directly when the configured proxy fails.
+                direct=(attempt%2==0)
+                if url.startswith("https://download.pytorch.org/"):
+                    direct=not direct
+                opener=urllib.request.build_opener(urllib.request.ProxyHandler({})) if direct else urllib.request.build_opener()
+                with opener.open(request,timeout=45) as response:
+                    data=response.read()
+                break
+            except (urllib.error.URLError, TimeoutError, ConnectionError) as error:
+                print(f"[fetch retry] attempt {attempt}/3 ({'direct' if direct else 'configured proxy'}): {type(error).__name__}",flush=True)
+                if attempt==3:
+                    raise
+                time.sleep(3)
         digest=hashlib.sha256(data).hexdigest()
         if expected_prefix and not digest.startswith(expected_prefix):
             raise ValueError(f"Weight checksum mismatch for {url}: {digest}, bytes={len(data)}")
+        if cached_payload is not None and url in cached_payload["downloads"]:
+            if digest!=cached_payload["downloads"][url]["sha256"]:
+                raise ValueError(f"Metric source/weight differs from cached evaluation: {url}")
         download_manifest[url]={"sha256":digest,"bytes":len(data)}
         print("[fetch done]",len(data),digest[:16],flush=True)
         return data
@@ -246,7 +360,9 @@ def main():
         path=run_path/"ckpts"/f"ckpt_epoch_{args.epoch:04d}.pth"
         ck=torch.load(path,map_location="cpu",weights_only=True,mmap=True)
         checkpoints.append((label,path,ck))
-    assert [(ck["model_kwargs"]["z_channels"],ck["config"]["model"]["beta"]) for _,_,ck in checkpoints]==[(32,0.5),(8,0.5),(8,0.01)],"Expected ordered ablation: C32 beta0.5, C8 beta0.5, C8 beta0.01"
+    if len({str(path.resolve()) for _,path,_ in checkpoints})!=len(checkpoints):
+        raise ValueError("Each experiment must use a distinct run/checkpoint")
+    assert [(ck["model_kwargs"]["z_channels"],ck["config"]["model"]["beta"]) for _,_,ck in checkpoints[:3]]==[(32,0.5),(8,0.5),(8,0.01)],"Expected ordered base ablation: C32 beta0.5, C8 beta0.5, C8 beta0.01"
     base_config=checkpoints[0][2]["config"]
     for _,_,ck in checkpoints:
         for key in ["data","seed","batch_size","optim","train"]:
@@ -254,6 +370,9 @@ def main():
         assert ck["epoch"]==args.epoch-1
         assert ck["config"]["auto_resume"] is False
         assert ck["config"]["path"]["dataset_path"]==base_config["path"]["dataset_path"]
+        for key,value in checkpoints[1][2]["model_kwargs"].items():
+            if key!="z_channels":
+                assert ck["model_kwargs"][key]==value,f"Uncontrolled model setting: {key}"
 
     dataset_root=ROOT/Path(base_config["path"]["dataset_path"])
     dataset=_ImageDataset(dataset_root,_image_transform(base_config["data"]["img_size"],3),3)
@@ -265,6 +384,12 @@ def main():
     N=len(test_indices)
     assert N>=2 and len(dataset)==30000
     image_ids=[int(dataset.paths[i].stem) for i in test_indices]
+    if cached_payload is not None:
+        cp=cached_payload["protocol"]
+        if cp["test_image_ids"]!=image_ids or cp["test_indices"]!=test_indices:
+            raise ValueError("Cached test images/order differ; use the same complete split or recompute")
+        if cp["split_seed"]!=base_config["seed"] or cp["input_resize"]!=list(base_config["data"]["img_size"]):
+            raise ValueError("Cached data preprocessing settings differ")
     loader=DataLoader(Subset(dataset,test_indices),batch_size=16,shuffle=False,num_workers=0)
     images=torch.empty(N,3,*base_config["data"]["img_size"],dtype=torch.float32)
     offset=0
@@ -346,6 +471,41 @@ def main():
     for label,path,ck in checkpoints:
         model=VAE(**ck["model_kwargs"]).to(DEVICE).eval()
         model.load_state_dict(ck["model"],strict=True)
+        cached=cache_index.get(str(path.resolve()))
+        if cached is not None:
+            if cached["config"]!=ck["config"] or cached["model_kwargs"]!=ck["model_kwargs"] or cached["checkpoint_epoch"]!=args.epoch:
+                raise ValueError(f"Cached checkpoint settings differ: {path}")
+            count=min(BATCH,N)
+            model_previews={}
+            errors={}
+            with torch.inference_mode():
+                x=images[:count].to(DEVICE)
+                mu,lv=model.encode(x)
+                noise=torch.stack([
+                    torch.randn(mu.shape[1:],generator=torch.Generator().manual_seed(SEED+image_id))
+                    for image_id in image_ids[:count]
+                ]).to(DEVICE)
+                for mode in ["sample","mean"]:
+                    latent=mu+(0.5*lv).exp()*noise if mode=="sample" else mu
+                    reconstruction,_=model.decode(latent)
+                    scores,prediction=paired_image_metrics(x,reconstruction)
+                    for key in ["mse_01","mae_01","psnr_db","ssim","lpips_alex_v01","mse_raw_m11"]:
+                        actual=scores[key].cpu().double().numpy()
+                        expected=np.asarray(cached["per_image"][mode][key][:count])
+                        if not np.allclose(actual,expected,rtol=5e-5,atol=1e-6):
+                            raise ValueError(f"Cached metric check failed: {label}/{mode}/{key}")
+                        errors[f"{mode}/{key}"]=float(np.max(np.abs(actual-expected)))
+                    model_previews[mode]=list(prediction[:6].cpu().unbind(0))
+            row=json.loads(json.dumps(cached))
+            row["label"]=label
+            row["evaluation_origin"]={"kind":"cached","source":str(Path(args.base_results).resolve()),
+                                      "device":cached_payload["protocol"]["device"]}
+            cache_checks[label]={"images_rechecked":count,"max_absolute_errors":errors}
+            results.append(row)
+            previews[label]=model_previews
+            print("[cache verified]",label,"images",count,flush=True)
+            del model
+            continue
         C=ck["model_kwargs"]["z_channels"]
         zlv=float(ck["model"]["_encoder.z_logvar"])
         xlv=float(ck["model"]["_decoder.x_logvar"])
@@ -423,7 +583,8 @@ def main():
              "element_compression_ratio":196608/dims,"parameters":sum(p.numel() for p in model.parameters()),
              "config":ck["config"],"model_kwargs":ck["model_kwargs"],
              "original_history":ck["history"],"latent":latent_diagnostics,"modes":{},"per_image":{},
-             "per_image_conditional_kl_nats":post_kl}
+             "per_image_conditional_kl_nats":post_kl,
+             "evaluation_origin":{"kind":"new","device":str(DEVICE)}}
         for mode in values:
             f=torch.cat(out_features[mode])
             score=summarize(values[mode])
@@ -442,7 +603,14 @@ def main():
         torch.cuda.empty_cache()
 
     comparisons={}
-    for effect,i,j in [("z_channels_32_to_8",0,1),("beta_0.5_to_0.01",1,2)]:
+    pair_specs=[("z_channels_32_to_8",0,1),("beta_0.5_to_0.01",1,2)]
+    beta_indices=sorted((i for i,r in enumerate(results) if r["z_channels"]==8),
+                        key=lambda i:results[i]["beta"],reverse=True)
+    existing_pairs={(i,j) for _,i,j in pair_specs}
+    for i,j in zip(beta_indices,beta_indices[1:]):
+        if (i,j) not in existing_pairs:
+            pair_specs.append((f"beta_{results[i]['beta']:g}_to_{results[j]['beta']:g}",i,j))
+    for effect,i,j in pair_specs:
         pair={"from":LABELS[i],"to":LABELS[j],"modes":{}}
         for mode in ["sample","mean"]:
             changes={}
@@ -476,7 +644,7 @@ def main():
         # Figure pixels only; captions are HTML so no font-cache files are needed.
         h,w=256,256
         columns=[images[:6].add(1).mul(.5).clamp(0,1),*[torch.stack(previews[label][mode]) for label in LABELS]]
-        canvas=Image.new("RGB",(4*w,6*h),"white")
+        canvas=Image.new("RGB",(len(columns)*w,min(6,N)*h),"white")
         for col,batch in enumerate(columns):
             for row,img in enumerate(batch):
                 array=(img.permute(1,2,0).numpy()*255).round().clip(0,255).astype(np.uint8)
@@ -515,7 +683,10 @@ def main():
               "rfid_solver":"FP64 symmetric PSD square roots via eigh/eigvalsh on GPU; negative roundoff eigenvalues clipped to zero",
               "precision":"FP32 eager VAE/LPIPS/Inception, FP64 FID and aggregate summaries; no AMP, no TF32",
               "device":str(DEVICE),"script_sha256":hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),"torch":torch.__version__,"torchvision":torchvision.__version__,"batch_size":BATCH}
-    payload={"created_at":datetime.now().astimezone().isoformat(),"protocol":protocol,"downloads":download_manifest,"experiments":results,"paired_comparisons":comparisons}
+    payload={"created_at":datetime.now().astimezone().isoformat(),"protocol":protocol,"downloads":download_manifest,"experiments":results,"paired_comparisons":comparisons,
+             "cache_reuse":{"base_results":str(Path(args.base_results).resolve()) if args.base_results else None,
+                            "base_results_sha256":hashlib.sha256(Path(args.base_results).read_bytes()).hexdigest() if args.base_results else None,
+                            "checks":cache_checks}}
     raw_json=json.dumps(payload,ensure_ascii=False,allow_nan=False)
     csv_io=io.StringIO()
     writer=csv.writer(csv_io)
@@ -533,7 +704,7 @@ def main():
     latex="\n".join(latex_lines)
 
     # Data-dependent interpretation; do not prescribe an outcome before measuring.
-    a,b,c=results
+    a,b,c=results[:3]
     z_score=comparisons["z_channels_32_to_8"]["modes"]["sample"]
     beta_score=comparisons["beta_0.5_to_0.01"]["modes"]["sample"]
     z_better=sum([z_score["psnr_db"]["delta_to_minus_from"]>0,z_score["ssim"]["delta_to_minus_from"]>0,z_score["lpips_alex_v01"]["delta_to_minus_from"]<0,z_score["rfid_delta"]<0])
@@ -554,17 +725,20 @@ def main():
     best_line="；".join(f"{key}: {label}" for key,label in best.items())
     capacity_delta=a["parameters"]-b["parameters"]
     report=f"""<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>三组 VAE 实验对比 · 2026-10-30</title><style>
+    <title>{len(results)}组 VAE 实验对比 · {datetime.now():%Y-%m-%d}</title><style>
     body{{font:16px/1.7 system-ui,sans-serif;max-width:1400px;margin:auto;padding:28px;color:#182739;background:#fafbfd}}
     h1,h2{{line-height:1.35}}h2{{margin-top:2em}}table{{border-collapse:collapse;width:100%;background:white;font-size:14px}}
     th,td{{padding:10px;border-bottom:1px solid #dce3eb;text-align:right;white-space:nowrap}}th:first-child,td:first-child{{text-align:left}}
     .scroll{{overflow-x:auto;margin:16px 0}}.card{{background:white;padding:18px 24px;border:1px solid #dce3eb;border-radius:10px}}
     pre{{white-space:pre-wrap;overflow-wrap:anywhere;padding:16px;background:#edf2f7}}img{{width:100%;height:auto}}a{{color:#2269a1}}.muted{{color:#596a7b}}
-    </style><h1>三组 VAE 实验的统一评估与单因素比较</h1>
+    </style><h1>{len(results)}组 VAE 实验的统一评估与单因素比较</h1>
     <p class="muted">{payload['created_at']} · MM-CelebA-HQ 256×256 · 固定测试集评估 N={N} · 全部 epoch {args.epoch}</p>
     <div class="card"><p><strong>主表使用一次固定后验采样，另附确定性的均值重建表；所有实验使用相同图片、指标实现和数值精度。</strong></p>
     <p>{z_verdict}{beta_verdict}</p><p>主表各项最佳：{html.escape(best_line)}。</p>
-    <p>只比较已保存的三个实验：A=(C32, β0.5)，B=(C8, β0.5)，C=(C8, β0.01)。磁盘中虽有 C16 和 LPIPS/GAN 配置，但没有对应结果，未列为实验。</p></div>
+    <p>本报告包含：{'；'.join(html.escape(r['label']) for r in results)}。设置来自实际 checkpoint；配置文件本身不算已完成实验。</p>
+    <p>复用结果 {'、'.join(html.escape(r['label'].split(':')[0]) for r in results if r['evaluation_origin']['kind']=='cached') or '无'}；
+    本次完整补算 {'、'.join(html.escape(r['label'].split(':')[0]) for r in results if r['evaluation_origin']['kind']=='new') or '无'}。
+    缓存复用时核对完整测试图片顺序、库版本、指标源码/权重 SHA256，并重新评估每个缓存模型的首批图片；仍假设原始数据集内容保持不变。</p></div>
 
     <h2>1. 实验设置与容量</h2>{settings_table}
     <p>全部使用 seed=42、24000/3000/3000 划分、相同学习率/调度、batch size 16×2 卡、{args.epoch} epochs、init_channels=64、ch_mult=[1,2,4,4]。
@@ -572,7 +746,7 @@ def main():
     输入/潜元素数是标量元素压缩倍率，不是熵编码后的码率或 bits/pixel。</p>
 
     <h2>2. 论文式主表：后验采样重建</h2>{main_table('sample')}
-    <p>重建方式：z=mu(x)+exp(z_logvar/2)·epsilon。每图一次采样，seed={SEED}+图片数字 ID；B/C 噪声完全相同，A 与 B/C 的前 8 个噪声通道相同。
+    <p>重建方式：z=mu(x)+exp(z_logvar/2)·epsilon。每图一次采样，seed={SEED}+图片数字 ID；所有 C8 实验噪声完全相同，C32 实验与其前 8 个噪声通道相同。
     ± 为测试图片之间的样本标准差，不是多次训练的均值±标准差，也不是置信区间。
     rFID 是真实测试图片与其重建图片之间的 2048 维 Inception 特征 Fréchet 距离；不是从先验随机生成图片的 FID。</p>
 
@@ -616,21 +790,23 @@ def main():
     原始训练 total loss 同时依赖 β 和可学习 s，不作为跨实验的优劣排名。</p>
 
     {interpretation_appendix(payload)}
+    {beta_sweep_appendix(payload)}
     <h2>7. 配对变化与结论边界</h2>{delta_table}
     <p>区间为配对逐图差的 mean±1.96·SE，反映本测试集和固定采样噪声下的变化；
     不是独立重复训练的不确定性，不覆盖不同初始化/数据顺序，不能当作超参数结论的多 seed 显著性证据。
     rFID 是整组统计量，不把它伪造成逐图分数或附上逐图标准差。本次 N={N}，仍有有限样本偏差；
     这里只支持相同数据、相同特征和预处理下的内部比较，不直接与其他论文不同数据集或样本量的数值横向排名。</p>
 
-    <h2>8. 同一组图片的重建对照</h2><p>列顺序：输入｜A C32 β0.5｜B C8 β0.5｜C C8 β0.01。使用测试划分中的前 6 张，未按指标挑图。</p>
+    <h2>8. 同一组图片的重建对照</h2><p>列顺序：输入｜{'｜'.join(html.escape(r['label']) for r in results)}。使用测试划分中的前 {min(6,N)} 张，未按指标挑图。</p>
     <h3>后验采样</h3><img id="sample-grid" alt="同图后验采样重建对比" src="{image_grid('sample')}">
     <h3>后验均值</h3><img id="mean-grid" alt="同图后验均值重建对比" src="{image_grid('mean')}">
 
     <h2>9. 可用于论文的描述与 LaTeX</h2>
-    <p>“我们在 MM-CelebA-HQ 的固定 {N} 张测试图片上比较三个训练 {args.epoch} epochs 的 VAE，并在相同 f=8 下考察潜通道数及 KL 权重。
+    <p>“我们在 MM-CelebA-HQ 的固定 {N} 张测试图片上比较 {len(results)} 个训练 {args.epoch} epochs 的 VAE，并在相同 f=8 下考察潜通道数及 KL 权重。
     我们报告重建 rFID、逐图平均 PSNR、SSIM 和 LPIPS-Alex v0.1，同时提供后验均值与固定噪声采样两种重建协议。
     在采样协议下，C32→C8（β=0.5）的结果为：{change_sentence('z_channels_32_to_8','sample')}；
     β=0.5→0.01（C8）的结果为：{change_sentence('beta_0.5_to_0.01','sample')}。
+    {' '.join('新增 '+html.escape(effect)+'：'+change_sentence(effect,'sample')+'。' for effect in comparisons if effect not in ['z_channels_32_to_8','beta_0.5_to_0.01'])}
     这些结果来自单次训练，反映当前架构和预算下的率失真折中。”</p>
     <pre>{html.escape(latex)}</pre><p>LaTeX 表使用 booktabs；正式稿的 caption 需注明数据集、N={N}、epoch {args.epoch}、采样协议及 LPIPS 版本。</p>
 

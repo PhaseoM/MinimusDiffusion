@@ -17,7 +17,7 @@ from torchvision import datasets, transforms
 from torchvision.utils import make_grid
 from einops import rearrange
 from einops.layers.torch import Rearrange
-from models.modules.neuralode import LabeledSampleable
+from models.modules.neural_ode import LabeledSampleable
 
 
 class MNISTSampler(nn.Module, LabeledSampleable):

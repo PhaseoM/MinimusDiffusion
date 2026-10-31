@@ -10,5 +10,5 @@ datasets/
 # **/data/log_info/
 
 **/results/
-
+**/pretrained/
 *.pth

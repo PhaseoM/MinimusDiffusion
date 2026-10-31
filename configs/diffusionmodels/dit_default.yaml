@@ -1,18 +1,78 @@
-MODEL:
-  NAME: "unet_default"
-  SKIP_PROCESS: "NULL" # NULL, ONE_RES, DUAL_RES
-DATA:
-  NAME: "ISIC2016"
-  BATCH_SIZE: 1
-  IMAGE_SIZE: [64, 64]
-  WORLD_SIZE: 1
-  NUM_WORKERS: 0
-OPTIM:
-  NAME: "adam"
-  BASE_LR: 8e-4
-  WARMUP_LR: 8e-4
-  WEIGHT_DECAY: 1e-4
-  DROPOUT: 0.1
-TRAIN:
-  EPOCHS: 2
-SEED: 3407
+seed: 42
+seed_everything: true
+auto_resume: false
+batch_size: 16
+save_freq: 5
+timestamp: ${now:%Y-%m-%d_%H-%M-%S}
+eps: 0.001
+
+model:
+  name: "DiT"
+  text_encoder_name: "openai/clip-vit-base-patch32"
+  fullname: ${.name}_${timestamp}
+  beta: 0.01
+  num_layers: 8
+  d_model: 512
+  num_heads: 8
+  mlp_hiddens: 2048
+  patch_size: 4
+  final_dim: 16
+  z_img_size: 32
+
+  init_channels: 64
+  z_channels: 8
+  x_channels: 3
+  ch_mult: [1, 2, 4, 4]
+  shift_factor: 0
+  scale_factor: 1
+  num_groups: 1
+path:
+  config_dir: ./configs
+  config_path: ${.config_dir}/autoencoders/dit_default.yaml
+  dataset_dir: ./datasets
+  dataset_path: ${.dataset_dir}/mm-celeba-hq
+  results_dir: ./results
+  output_dir: ${.results_dir}/${model.fullname}
+  ckpts_dir: ${.output_dir}/ckpts
+  data_dump_dir: ${.output_dir}/data_dump
+  logs_dir: ${.output_dir}/logs
+  resume_path: ${.ckpts_dir}/ckpt_epoch_0005.pth
+  eval_load_path: ${.ckpts_dir}/best_ckpt.pth
+  vae_ckpt_path: "./results/VAE_mmchq_f8c8_betae-1/ckpts/ckpt_epoch_0100.pth"
+data:
+  dataset_name: "unknown_dataset_name"
+  prompt_drop_rate: 0.1
+  val_ratio: 0.1
+  img_size: [256, 256]
+  img_channels: 3
+augs:
+  auto_augment: false
+optim:
+  name: "adam"
+  base_lr: 1e-4
+  warmup_lr: 8e-4
+  warmup_step: 300
+  momentum: 0.9
+  betas: [0.9, 0.999]
+  weight_decay: 1e-4
+  drop_out: 0.1
+  eps: 1e-8
+  scheduler:
+    name: "multistep"
+dist:
+  amp: true
+  main_rank: 0
+  world_size: 3
+  num_workers: 4
+train:
+  batch_size: ${batch_size}
+  start_epoch: 0
+  epochs: 100
+val:
+  batch_size: ${batch_size}
+test:
+  batch_size: ${batch_size}
+mode:
+  train: true
+  eval: false
+  process: false

@@ -1,13 +1,14 @@
 import torch
-from torch import nn, Tensor
+from torch import nn
+from models.modules.neural_ode import GaussianConditionalProbabilityPath
 
 
 def vae_loss(
-    x_true: Tensor,
-    z_mean: Tensor,
-    z_logvar: Tensor,
-    x_mean: Tensor,
-    x_logvar: Tensor,
+    x_true: torch.Tensor,
+    z_mean: torch.Tensor,
+    z_logvar: torch.Tensor,
+    x_mean: torch.Tensor,
+    x_logvar: torch.Tensor,
     beta: float,
 ):
     z_mean = z_mean.float()
@@ -26,3 +27,7 @@ def vae_loss(
     loss_vae = loss_recon + beta * loss_kl
 
     return loss_vae
+
+
+def mseloss(theta: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    return torch.square(theta - target).mean()

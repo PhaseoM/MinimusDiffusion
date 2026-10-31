@@ -20,7 +20,7 @@ class Sampleable(ABC):
         Args:
             - num_samples: the desired number of samples
         Returns:
-            - samples: b d
+            - samples: (b, d)
         """
         pass
 
@@ -36,8 +36,8 @@ class LabeledSampleable(ABC):
         Args:
             - num_samples: the desired number of samples
         Returns:
-            - samples: b d
-            - labels: b
+            - samples: (b, d)
+            - labels: (b)
         """
         pass
 
@@ -54,10 +54,14 @@ class IsotropicGaussian(nn.Module, Sampleable):
         super().__init__()
         self.shape = shape
         self.std = std
-        self.dummy = nn.Buffer(torch.zeros(1))  # Will automatically be moved when self.to(...) is called...
+        self.dummy = nn.Buffer(torch.zeros(1))
 
     def sample(self, num_samples) -> torch.Tensor:
-        return self.std * torch.randn(num_samples, *self.shape).to(self.dummy.device)
+        return self.std * torch.randn(
+            num_samples,
+            *self.shape,
+            device=self.dummy.device,
+        )
 
 
 class GMM(nn.Module, LabeledSampleable):
@@ -72,8 +76,8 @@ class GMM(nn.Module, LabeledSampleable):
         Args:
           - num_samples: the desired number of samples
         Returns:
-          - samples: b n
-          - labels: b
+          - samples: (b, n)
+          - labels: (b)
         """
         # Choose the amount of each mode
         # Perform multinomial sampling on CPU to avoid device-side assert errors
@@ -101,9 +105,9 @@ class ConditionalProbabilityPath(nn.Module, ABC):
         """
         Samples from the marginal distribution p_t(x) = p_t(x|z) p(z)
         Args:
-            - t: b
+            - t: (b)
         Returns:
-            - x: samples from p_t(x), b ... (i.e.,. `b d`, `b c h w`, etc.)
+            - x: samples from p_t(x), (b, ...)
         """
         num_samples = t.shape[0]
         # Sample conditioning variable z ~ p(z)
@@ -119,8 +123,8 @@ class ConditionalProbabilityPath(nn.Module, ABC):
         Args:
             - num_samples: the number of samples
         Returns:
-            - z: b ...
-            - y: b
+            - z: (b, ...)
+            - y: (b)
         """
         pass
 
@@ -129,10 +133,10 @@ class ConditionalProbabilityPath(nn.Module, ABC):
         """
         Samples from the conditional distribution p_t(x|z)
         Args:
-            - z: conditioning variable b ...
-            - t: time b
+            - z: conditioning variable (b ...)
+            - t: time (b)
         Returns:
-            - x: samples from p_t(x|z), b ...
+            - x: samples from p_t(x|z), (b ...)
         """
         pass
 
@@ -141,11 +145,11 @@ class ConditionalProbabilityPath(nn.Module, ABC):
         """
         Evaluates the conditional vector field u_t(x|z)
         Args:
-            - x: b ...
-            - z: b ...
-            - t: b
+            - x: (b ...)
+            - z: (b ...)
+            - t: (b)
         Returns:
-            - conditional_vector_field: conditional vector field b c h w
+            - conditional_vector_field: conditional vector field (b c h w)
         """
         pass
 
@@ -154,11 +158,11 @@ class ConditionalProbabilityPath(nn.Module, ABC):
         """
         Evaluates the conditional score of p_t(x|z)
         Args:
-            - x: b ...
-            - z: b ...
-            - t: b
+            - x: (b ...)
+            - z: (b ...)
+            - t: (b)
         Returns:
-            - score: b ...
+            - score: (b ...)
         """
         pass
 
@@ -166,36 +170,18 @@ class ConditionalProbabilityPath(nn.Module, ABC):
 class Alpha(ABC):
     def __init__(self):
         # Check alpha_t(0) = 0
-        assert torch.allclose(
-            self(
-                torch.zeros(
-                    1,
-                )
-            ),
-            torch.zeros(
-                1,
-            ),
-        )
+        assert torch.allclose(self(torch.zeros(1)), torch.zeros(1))
         # Check alpha_1 = 1
-        assert torch.allclose(
-            self(
-                torch.ones(
-                    1,
-                )
-            ),
-            torch.ones(
-                1,
-            ),
-        )
+        assert torch.allclose(self(torch.ones(1)), torch.ones(1))
 
     @abstractmethod
     def __call__(self, t: torch.Tensor) -> torch.Tensor:
         """
         Evaluates alpha_t. Should satisfy: self(0.0) = 0.0, self(1.0) = 1.0.
         Args:
-            - t: b
+            - t: (b)
         Returns:
-            - alpha_t: b
+            - alpha_t: (b)
         """
         pass
 
@@ -203,9 +189,9 @@ class Alpha(ABC):
         """
         Evaluates d/dt alpha_t.
         Args:
-            - t: b
+            - t: (b)
         Returns:
-            - d/dt a_t: b
+            - d/dt a_t: (b)
         """
         t = t.unsqueeze(1)
         dt = vmap(jacrev(self))(t)
@@ -224,9 +210,9 @@ class Beta(ABC):
         """
         Evaluates alpha_t. Should satisfy: self(0.0) = 1.0, self(1.0) = 0.0.
         Args:
-            - t: b
+            - t: (b)
         Returns:
-            - beta_t: b
+            - beta_t: (b)
         """
         pass
 
@@ -234,9 +220,9 @@ class Beta(ABC):
         """
         Evaluates d/dt beta_t.
         Args:
-            - t: b
+            - t: (b)
         Returns:
-            - d/dt beta_t: b
+            - d/dt beta_t: (b)
         """
         t = t.unsqueeze(1)
         dt = vmap(jacrev(self))(t)
@@ -251,9 +237,9 @@ class LinearAlpha(Alpha):
     def __call__(self, t: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            - t: b
+            - t: (b)
         Returns:
-            - alpha_t: b
+            - alpha_t: (b)
         """
         return t
 
@@ -261,9 +247,9 @@ class LinearAlpha(Alpha):
         """
         Evaluates d/dt alpha_t.
         Args:
-            - t: b
+            - t: (b)
         Returns:
-            - d/dt alpha_t b
+            - d/dt alpha_t (b)
         """
         return torch.ones_like(t)
 
@@ -276,19 +262,19 @@ class LinearBeta(Beta):
     def __call__(self, t: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            - t: b
+            - t: (b)
         Returns:
-            - beta_t: b
+            - beta_t: (b)
         """
         return 1 - t
 
     def dt(self, t: torch.Tensor) -> torch.Tensor:
         """
-        Evaluates d/dt alpha_t.
+        Evaluates d/dt beta_t.
         Args:
-            - t: b
+            - t: (b)
         Returns:
-            - d/dt alpha_t: b
+            - d/dt beta_t: (b)
         """
         return -torch.ones_like(t)
 
@@ -307,8 +293,8 @@ class GaussianConditionalProbabilityPath(ConditionalProbabilityPath):
         Args:
             - num_samples: the number of samples
         Returns:
-            - z: b ...
-            - y: b
+            - z: (b ...)
+            - y: (b)
         """
         return self.p_data.sample(num_samples)
 
@@ -316,24 +302,24 @@ class GaussianConditionalProbabilityPath(ConditionalProbabilityPath):
         """
         Samples from the conditional distribution p_t(x|z)
         Args:
-            - z: b ...
-            - t: b
+            - z: (b ...)
+            - t: (b)
         Returns:
-            - x: b ...
+            - x: (b ...)
         """
-        alpha_t = self.rearrange_scalar(self.alpha(t))  # (b 1 1 1)
-        beta_t = self.rearrange_scalar(self.beta(t))  # (b 1 1 1)
+        alpha_t = self.rearrange_scalar(self.alpha(t))
+        beta_t = self.rearrange_scalar(self.beta(t))
         return alpha_t * z + beta_t * torch.randn_like(z)
 
     def conditional_vector_field(self, x: torch.Tensor, z: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
         """
         Evaluates the conditional vector field u_t(x|z)
         Args:
-            - x: b c h w
-            - z: b c h w
-            - t: b
+            - x: (b ...)
+            - z: (b ...)
+            - t: (b)
         Returns:
-            - conditional_vector_field: conditional vector field (num_samples, c, h, w)
+            - conditional_vector_field: (num_samples ...)
         """
         alpha_t = self.rearrange_scalar(self.alpha(t))  # b
         beta_t = self.rearrange_scalar(self.beta(t))  # b
@@ -346,11 +332,11 @@ class GaussianConditionalProbabilityPath(ConditionalProbabilityPath):
         """
         Evaluates the conditional score of p_t(x|z)
         Args:
-            - x: b ...
-            - z: b ...
-            - t: b
+            - x: (b ...)
+            - z: (b ...)
+            - t: (b)
         Returns:
-            - conditional_score: b ...
+            - conditional_score: (b ...)
         """
         alpha_t = self.rearrange_scalar(self.alpha(t))
         beta_t = self.rearrange_scalar(self.beta(t))
@@ -363,10 +349,10 @@ class ODE(ABC):
         """
         Returns the drift coefficient of the ODE.
         Args:
-            - xt: state at time t, shape (b, ...)
+            - xt: state at time t, shape (b ...)
             - t: time, shape (b)
         Returns:
-            - drift_coefficient: shape (b, ...)
+            - drift_coefficient: shape (b ...)
         """
         pass
 
@@ -377,10 +363,10 @@ class SDE(ABC):
         """
         Returns the drift coefficient of the ODE.
         Args:
-            - xt: state at time t, shape (b, ...)
+            - xt: state at time t, shape (b ...)
             - t: time, shape (b)
         Returns:
-            - drift_coefficient: shape (b, ...)
+            - drift_coefficient: shape (b ...)
         """
         pass
 
@@ -389,10 +375,10 @@ class SDE(ABC):
         """
         Returns the diffusion coefficient of the ODE.
         Args:
-            - xt: state at time t, shape (b, ...)
+            - xt: state at time t, shape (b ...)
             - t: time, shape (b)
         Returns:
-            - diffusion_coefficient: shape (b, ...)
+            - diffusion_coefficient: shape (b ...)
         """
         pass
 
@@ -403,11 +389,11 @@ class Simulator(ABC):
         """
         Takes one simulation step
         Args:
-            - xt: state at time t, shape (b, ...)
+            - xt: state at time t, shape (b ...)
             - t: time, shape (b)
             - dt: derivative of time, shape (b)
         Returns:
-            - next_state: state at time t + dt, shape (b,...)
+            - next_state: state at time t + dt, shape (b...)
         """
         pass
 
@@ -416,10 +402,10 @@ class Simulator(ABC):
         """
         Simulates using the discretization gives by ts
         Args:
-            - x_init: initial state at time ts[0], shape (b, ...)
-            - ts: timesteps, shape (b)
-        Returns:
-            - x_final: final state at time ts[-1], shape (b, ...)
+            - x_init: initial state at time ts[b, 0], shape (b ...)
+            - ts: timesteps, shape (b, nt)
+        Return:
+            - x_final: final state at time ts[b, -1], shape (b ...)
         """
         nts = ts.shape[1]
         pbar = tqdm(range(nts - 1)) if use_tqdm else range(nts - 1)
@@ -434,10 +420,10 @@ class Simulator(ABC):
         """
         Simulates using the discretization gives by ts
         Args:
-            - x_init: initial state at time ts[0], shape (b, ...)
+            - x_init: initial state at time ts[0], shape (b ...)
             - ts: timesteps, shape (b, nt)
-        Returns:
-            - x_traj: trajectory of x_ts over ts, shape (b, nt, ...)
+        Return:
+            - x_traj: trajectory of x_ts over ts, shape (b nt ...)
         """
         x_traj = [x.clone()]
         nts = ts.shape[1]
@@ -482,3 +468,42 @@ def record_every(num_timesteps: int, record_every: int) -> torch.Tensor:
         torch.arange(0, num_timesteps - 1, record_every),
         torch.tensor([num_timesteps - 1]),
     ])
+
+
+class ConditionalVectorField(nn.Module, ABC):
+    """
+    Conditional vector field u_t^theta(x|y)
+    """
+
+    @abstractmethod
+    def forward(self, x: torch.Tensor, t: torch.Tensor, y: torch.Tensor):
+        """
+        Args:
+            - x: (b ...)
+            - t: (b)
+            - y: (b)
+        Return:
+            - u_t^theta(x|y): (b ...)
+        """
+        pass
+
+
+class CFGVectorFieldODE(ODE):
+    def __init__(self, cvf: ConditionalVectorField, null_label: int, guidance_scale: float = 1.0):
+        self.cvf = cvf
+        self.guidance_scale = guidance_scale
+        self.null_label = null_label
+
+    def drift_coefficient(self, x: torch.Tensor, t: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            - x: (b ...)
+            - t: (b)
+            - y: (b)
+        Return:
+            - the drift_coefficient of cvf: (b ...)
+        """
+        guided_vector_field = self.cvf(x, t, y)
+        unguided_y = torch.ones_like(y) * self.null_label
+        unguided_vector_field = self.cvf(x, t, unguided_y)
+        return (1 - self.guidance_scale) * unguided_vector_field + self.guidance_scale * guided_vector_field

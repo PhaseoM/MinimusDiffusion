@@ -5,6 +5,7 @@ import tomllib
 import argparse
 import random
 import functools
+from torch import nn
 from pathlib import Path
 from functools import wraps
 from datetime import datetime
@@ -90,3 +91,21 @@ def results_mkdirs(config, logger):
     data_dump_dir.mkdir(parents=True, exist_ok=True)
     logs_dir.mkdir(parents=True, exist_ok=True)
     logger.info(f"Made the results dir for {fullname}.")
+
+
+def model_size_b(model: nn.Module, logger, MiB: int = 1024**2) -> int:
+    """
+    Returns model size in bytes. Based on https://discuss.pytorch.org/t/finding-model-size/130275/2
+    Args:
+        - model: self-explanatory
+    Returns:
+        - size: model size in bytes
+    """
+    size = 0
+    for param in model.parameters():
+        size += param.nelement() * param.element_size()
+    for buf in model.buffers():
+        size += buf.nelement() * buf.element_size()
+
+    logger.info(f"Training model with size: {size / MiB:.3f} MiB")
+    return size
