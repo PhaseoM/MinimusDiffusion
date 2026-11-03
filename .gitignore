@@ -3,12 +3,10 @@
 
 __pycache__/
 
-datasets/
-# **/data/checkpoints/
-# **/data/data_dump/
-# **/data/data_eval/
-# **/data/log_info/
-
+**/datasets/
 **/results/
+
 **/pretrained/
+!/pretrained/pretrained_download.py
+
 *.pth

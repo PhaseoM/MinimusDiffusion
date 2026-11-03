@@ -1,3 +1,4 @@
+config_name: "diffusionmodels/schema"
 seed: 42
 seed_everything: true
 auto_resume: false
@@ -8,9 +9,8 @@ eps: 0.001
 
 model:
   name: "DiT"
-  text_encoder_name: "openai/clip-vit-base-patch32"
+  text_encoder_name: "clip-vit-large-patch14"
   fullname: ${.name}_${timestamp}
-  beta: 0.01
   num_layers: 4
   d_model: 512
   num_heads: 1
@@ -18,7 +18,9 @@ model:
   patch_size: 4
   final_dim: 16
   z_img_size: 32
-
+  guidance_scale: 2
+  
+  beta: 0.01
   init_channels: 64
   z_channels: 8
   x_channels: 3
@@ -28,20 +30,25 @@ model:
   num_groups: 1
 path:
   config_dir: ./configs
-  config_path: ${.config_dir}/autoencoders/dit_default.yaml
+  config_path: ${.config_dir}/${config_name}.yaml
+  # dataset_paths
   dataset_dir: ./datasets
-  dataset_path: ${.dataset_dir}/MM-CelebA-HQ
+  dataset_path: ${.dataset_dir}/${data.dataset_name}
+  cache_path: ${.dataset_path}/caches
+  # results_paths
   results_dir: ./results
   output_dir: ${.results_dir}/${model.fullname}
   ckpts_dir: ${.output_dir}/ckpts
   data_dump_dir: ${.output_dir}/data_dump
   logs_dir: ${.output_dir}/logs
+  # preload_paths
+  text_encoder_path: ./pretrained/${model.text_encoder_name}
+  # custom_paths
   resume_path: ${.ckpts_dir}/ckpt_epoch_0005.pth
   eval_load_path: ${.ckpts_dir}/best_ckpt.pth
-  text_encoder_path: "./pretrained/clip-vit-base-patch32"
-  vae_ckpt_path: "./results/VAE_mmchq_f8c8_betae-1/ckpts/ckpt_epoch_0100.pth"
+  vae_ckpt_path: ./results/VAE_mmchq_f8c8_betae-1/ckpts/ckpt_epoch_0100.pth
 data:
-  dataset_name: "unknown_dataset_name"
+  dataset_name: "mm-celeba-hq"
   prompt_drop_rate: 0.1
   val_ratio: 0.1
   img_size: [256, 256]
@@ -73,7 +80,13 @@ val:
   batch_size: ${batch_size}
 test:
   batch_size: ${batch_size}
+  guidance_scales: [1.0, 1.5, 2.0, 3.0, 5.0]
+  num_timesteps: 100
+  num_samples: 3000
+cache:
+  use_latent_features: false
+  use_text_featrues: false
 mode:
   train: true
-  eval: false
-  process: false
+  val: false
+  test: false

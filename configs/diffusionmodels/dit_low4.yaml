@@ -1,24 +1,26 @@
+config_name: "diffusionmodels/dit_low4"
 seed: 42
 seed_everything: true
 auto_resume: false
-batch_size: 16
-save_freq: 5
+batch_size: 48
+save_freq: 150
 timestamp: ${now:%Y-%m-%d_%H-%M-%S}
 eps: 0.001
 
 model:
   name: "DiT"
-  text_encoder_name: "openai/clip-vit-base-patch32"
+  text_encoder_name: "clip-vit-large-patch14"
   fullname: ${.name}_${timestamp}
-  beta: 0.01
-  num_layers: 8
-  d_model: 512
-  num_heads: 8
-  mlp_hiddens: 2048
+  num_layers: 4
+  d_model: 256
+  num_heads: 4
+  mlp_hiddens: 1024
   patch_size: 4
   final_dim: 16
   z_img_size: 32
+  guidance_scale: 2
 
+  beta: 0.1
   init_channels: 64
   z_channels: 8
   x_channels: 3
@@ -27,20 +29,11 @@ model:
   scale_factor: 1
   num_groups: 1
 path:
-  config_dir: ./configs
-  config_path: ${.config_dir}/autoencoders/dit_default.yaml
-  dataset_dir: ./datasets
-  dataset_path: ${.dataset_dir}/mm-celeba-hq
-  results_dir: ./results
-  output_dir: ${.results_dir}/${model.fullname}
-  ckpts_dir: ${.output_dir}/ckpts
-  data_dump_dir: ${.output_dir}/data_dump
-  logs_dir: ${.output_dir}/logs
   resume_path: ${.ckpts_dir}/ckpt_epoch_0005.pth
   eval_load_path: ${.ckpts_dir}/best_ckpt.pth
   vae_ckpt_path: "./results/VAE_mmchq_f8c8_betae-1/ckpts/ckpt_epoch_0100.pth"
 data:
-  dataset_name: "unknown_dataset_name"
+  dataset_name: "mm-celeba-hq"
   prompt_drop_rate: 0.1
   val_ratio: 0.1
   img_size: [256, 256]
@@ -49,7 +42,7 @@ augs:
   auto_augment: false
 optim:
   name: "adam"
-  base_lr: 1e-4
+  base_lr: 1e-3
   warmup_lr: 8e-4
   warmup_step: 300
   momentum: 0.9
@@ -67,12 +60,17 @@ dist:
 train:
   batch_size: ${batch_size}
   start_epoch: 0
-  epochs: 100
+  epochs: 300
 val:
   batch_size: ${batch_size}
 test:
   batch_size: ${batch_size}
+  num_timesteps: 100
+  num_samples: 1000
+cache:
+  use_latent_features: true
+  use_text_featrues: true
 mode:
   train: true
-  eval: false
-  process: false
+  val: false
+  test: false

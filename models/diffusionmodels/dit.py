@@ -8,7 +8,7 @@ from einops import rearrange
 from einops.layers.torch import Rearrange
 from transformers import AutoTokenizer, CLIPTextModel
 
-from models.modules.neural_ode import ConditionalVectorField
+from ..modules.neural_ode import ConditionalVectorField
 
 
 class MLP(nn.Module):
@@ -64,8 +64,8 @@ class FourierEncoder(nn.Module):
 class PromptEncoder(nn.Module):
     def __init__(
         self,
-        model_name: str = "openai/clip-vit-base-patch32",
-        text_encoder_path: str = "./pretrained/clip-vit-base-patch32",
+        model_name: str = "openai/clip-vit-large-patch14",
+        text_encoder_path: str = "./pretrained/clip-vit-large-patch14",
     ):
         super().__init__()
 
@@ -282,8 +282,8 @@ class DiffusionTransformerWithFlowModel(ConditionalVectorField):
         d_model: int = 256,
         num_heads: int = 4,
         final_dim: int = 10,
-        text_encoder_name: str = "openai/clip-vit-base-patch32",
-        text_encoder_path: str = "./pretrained/clip-vit-base-patch32",
+        text_encoder_name: str = "openai/clip-vit-large-patch14",
+        text_encoder_path: str = "./pretrained/clip-vit-large-patch14",
     ):
         super().__init__()
         # build time_embedder, prompt_embedder and prompt_proj

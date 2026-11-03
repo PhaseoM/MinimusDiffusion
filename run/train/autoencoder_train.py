@@ -116,29 +116,10 @@ def main(config):
                 save_ckpt(config, epoch, model, optimizer, lr_scheduler, loss_scaler, model_kwargs, history, logger)
 
         dist.barrier()
-    if rank == config.dist.main_rank:
-        test_loss = vae_engine.test(
-            config=config,
-            model=model.module,
-            device=device,
-            dataloader=test_dataloader,
-        )
-        logger.info(f"Training Ended. test_loss={test_loss}")
-        dumped_data = {
-            "config": config,
-            "history": history,
-            "test_loss": test_loss,
-        }
-        data_dump_file = config.path.data_dump_dir + "/" + "train_info.pkl"
-        with open(data_dump_file, "wb") as f:
-            pickle.dump(dumped_data, f)
     delete_ddp()
 
 
 if __name__ == "__main__":
     config = load_config()
 
-    if config.mode.train:
-        main(config)
-    if config.mode.process:
-        data_process(config)
+    main(config)

@@ -46,16 +46,16 @@ def train(
 
         optimizer.zero_grad(set_to_none=True)
 
-        # sample from the latent space through vae encoder
-        with torch.no_grad():
-            z_mean, z_logvar = vae.encode(X)
-            z_latent = z_mean + torch.exp(0.5 * z_logvar) * torch.randn_like(z_mean)
-
-        # time_gen and add noise
-        t = torch.rand(batch_size, device=device) * (1 - config.eps)
-        x_latent = prob_path.sample_conditional_path(z_latent, t)
-
         with torch.amp.autocast(device_type="cuda", dtype=torch.float16, enabled=amp_enabled):
+            # sample from the latent space through vae encoder
+            with torch.no_grad():
+                z_mean, z_logvar = vae.encode(X)
+                z_latent = z_mean + torch.exp(0.5 * z_logvar) * torch.randn_like(z_mean)
+
+            # time_gen and add noise
+            t = torch.rand(batch_size, device=device, dtype=torch.float32) * (1 - config.eps)
+            x_latent = prob_path.sample_conditional_path(z_latent, t)
+
             ut_theta = model(x_latent, t, y)
             ut_target = prob_path.conditional_vector_field(x_latent, z_latent, t)
             loss = mseloss(ut_theta, ut_target)
@@ -103,12 +103,12 @@ def validate(
         y = list(y)
         batch_size = X.size(0)
 
-        z_mean, z_logvar = vae.encode(X)
-        z_latent = z_mean + torch.exp(0.5 * z_logvar) * torch.randn_like(z_mean)
-        t = torch.rand(batch_size, device=device) * (1 - config.eps)
-        x_latent = prob_path.sample_conditional_path(z_latent, t)
-
         with torch.amp.autocast(device_type="cuda", dtype=torch.float16, enabled=amp_enabled):
+            z_mean, z_logvar = vae.encode(X)
+            z_latent = z_mean + torch.exp(0.5 * z_logvar) * torch.randn_like(z_mean)
+            t = torch.rand(batch_size, device=device, dtype=torch.float32) * (1 - config.eps)
+            x_latent = prob_path.sample_conditional_path(z_latent, t)
+
             ut_theta = model(x_latent, t, y)
             ut_target = prob_path.conditional_vector_field(x_latent, z_latent, t)
             loss = mseloss(ut_theta, ut_target)
