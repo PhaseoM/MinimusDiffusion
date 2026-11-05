@@ -1,5 +1,5 @@
 defaults:
-  - diffusion: default
+  - diffusion: base4
   - autoencoder: default
   - data: default
   - optim: adamw
@@ -10,9 +10,8 @@ exp_name: "exp001"
 seed: 1105
 seed_everything: True
 save_freq: 5
-timestamp: ${now:%Y-%m-%d_%H-%M-%S}
 auto_resume: False
-resume_path: ${.ckpts_dir}/ckpt_epoch_0005.pth
+resume_path: ${result.ckpts_dir}/ckpt_epoch_0005.pth
 
 amp:
   enabled: True

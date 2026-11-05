@@ -1,8 +1,8 @@
 defaults:
   - dataset: mm_celeba_hq
-  _self_
+  - _self_
 
-batch_size: ${batch_size}
+batch_size: 16
 train:
   start_epoch: 0
   epochs: 100

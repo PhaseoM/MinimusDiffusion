@@ -1,6 +1,5 @@
 name: "DiT"
 text_encoder_name: "clip-vit-large-patch14"
-fullname: ${.name}_${timestamp}
 num_layers: 12
 d_model: 768
 num_heads: 8
@@ -10,4 +9,4 @@ final_dim: 16
 z_img_size: 32
 eps: 0.001
 autoencoder_path: ./results/VAE_mmchq_f8c8_betae-1/ckpts/ckpt_epoch_0100.pth
-textencoder_path: ./pretrained/${model.text_encoder_name}
+textencoder_path: ./pretrained/${.text_encoder_name}
