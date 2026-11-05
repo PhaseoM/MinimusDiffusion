@@ -2,8 +2,8 @@ config_name: "diffusionmodels/dit_tiny4"
 seed: 42
 seed_everything: true
 auto_resume: false
-batch_size: 48
-save_freq: 150
+batch_size: 1536
+save_freq: 300
 timestamp: ${now:%Y-%m-%d_%H-%M-%S}
 eps: 0.001
 
@@ -34,21 +34,20 @@ path:
   vae_ckpt_path: "./results/VAE_mmchq_f8c8_betae-1/ckpts/ckpt_epoch_0100.pth"
 data:
   dataset_name: "mm-celeba-hq"
+  use_cache: true
   prompt_drop_rate: 0.1
-  val_ratio: 0.1
   img_size: [256, 256]
   img_channels: 3
 augs:
   auto_augment: false
 optim:
-  name: "adam"
-  base_lr: 1e-3
+  name: "adamw"
+  base_lr: 1e-4
   warmup_lr: 8e-4
   warmup_step: 300
   momentum: 0.9
   betas: [0.9, 0.999]
-  weight_decay: 1e-4
-  drop_out: 0.1
+  weight_decay: 0.0
   eps: 1e-8
   scheduler:
     name: "multistep"
@@ -63,13 +62,12 @@ train:
   epochs: 300
 val:
   batch_size: ${batch_size}
+  dataset_ratio: 0.1
 test:
   batch_size: ${batch_size}
+  dataset_ratio: 0.1
   num_timesteps: 100
   num_samples: 1000
-cache:
-  use_latent_features: true
-  use_text_featrues: true
 mode:
   train: true
   val: false

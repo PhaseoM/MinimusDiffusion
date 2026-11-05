@@ -3,7 +3,7 @@ import torch
 import torch.distributed as dist
 
 
-def new_ddp(config):
+def build_ddp():
     if not torch.cuda.is_available():
         raise RuntimeError("DDP without CUDA")
 
@@ -12,9 +12,6 @@ def new_ddp(config):
     rank = dist.get_rank()
     local_rank = int(os.environ["LOCAL_RANK"])
     world_size = dist.get_world_size()
-
-    # if world_size != config.dist.world_size:
-    #     raise RuntimeError(f"need {config.dist.world_size} GPU,but world_size={world_size}")
 
     torch.cuda.set_device(local_rank)
     device = torch.device(f"cuda:{local_rank}")

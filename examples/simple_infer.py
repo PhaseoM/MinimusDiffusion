@@ -10,22 +10,22 @@ from torchvision.utils import save_image
 from tqdm import tqdm
 
 
-CHECKPOINT = "./results/DiT_20261102_203548/ckpts/ckpt_epoch_0300.pth"
+CHECKPOINT = "./results/DiT_20261104_211157/ckpts/ckpt_epoch_0300.pth"
 VAE_CHECKPOINT = None  # None：使用 LDM 检查点记录的 VAE；手动指定时须与训练匹配
-TEXT_ENCODER_PATH = "pretrained/clip-vit-base-patch32"
+TEXT_ENCODER_PATH = "pretrained/clip-vit-large-patch14"
 
-PROMPT = "She is attractive, young, smiling. The person is with high cheekbones, arched eyebrows and is wearing heavy makeup, lipstick."
+PROMPT = "This man appears to be . The person is with mouth slightly open, bags under eyes, big nose, eyeglasses, pale skin, pointy nose and wears ."
 NEGATIVE_PROMPT = ""
 GUIDANCE_SCALE = 3
-NUM_STEPS = 3000
+NUM_STEPS = 300
 SAMPLER = "euler"
 NUM_IMAGES = 4
 SEED = 42
-DEVICE = "cuda:3"
+DEVICE = "cuda:0"
 USE_FP16 = False
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def project_path(value):

@@ -8,8 +8,7 @@ from termcolor import colored
 @functools.lru_cache()
 def create_logger(logs_dir: str, dist_rank: int = 0, name: str = "") -> logging.Logger:
     # create dir
-    output_dir = os.path.join(logs_dir, name)
-    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(logs_dir, exist_ok=True)
 
     # create logger
     logger = logging.getLogger(name)
@@ -32,7 +31,7 @@ def create_logger(logs_dir: str, dist_rank: int = 0, name: str = "") -> logging.
         logger.addHandler(console_handler)
 
     # create file handlers
-    file_handler = logging.FileHandler(os.path.join(output_dir, f"log_rank{dist_rank}.txt"), mode="a")
+    file_handler = logging.FileHandler(os.path.join(logs_dir, f"log_rank{dist_rank}.txt"), mode="a")
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(logging.Formatter(fmt=fmt, datefmt="%Y-%m-%d %H:%M:%S"))
     logger.addHandler(file_handler)

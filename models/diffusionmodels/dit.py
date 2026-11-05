@@ -306,7 +306,7 @@ class DiffusionTransformerWithFlowModel(ConditionalVectorField):
             img_size=img_size, patch_size=patch_size, dim=d_model, final_dim=final_dim, c_out=c
         )
 
-    def forward(self, x: torch.Tensor, t: torch.Tensor, y: Optional[torch.Tensor | list[str]]) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, t: torch.Tensor, y: torch.Tensor | list[str]) -> torch.Tensor:
         """
         Args:
             - x: b c h w
@@ -317,7 +317,8 @@ class DiffusionTransformerWithFlowModel(ConditionalVectorField):
         """
         # Embed time and prompt
         time_embed = self.time_embedder(t)  # b d
-        prompt_features = self.prompt_embedder(y)  # b d
+        # prompt_features = self.prompt_embedder(y)  # b d
+        prompt_features = y if isinstance(y, torch.Tensor) else self.prompt_embedder(y)
         prompt_embed = self.prompt_proj(prompt_features)
 
         x = self.patchifier(x)  # b l d

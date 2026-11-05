@@ -1,0 +1,8 @@
+dataset_name: "mm-celeba-hq"
+use_cache: False
+prompt_drop_rate: 0.1
+img_size: 256
+img_channels: 3
+dataset_dir: ./datasets
+dataset_path: ${.dataset_dir}/${data.dataset_name}
+cache_path: ${.dataset_path}/caches

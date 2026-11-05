@@ -7,21 +7,21 @@ from pathlib import Path
 from torch import nn
 from torch.nn.parallel import DistributedDataParallel as DDP
 from tqdm import tqdm
-from data.build_dataloader import build_mmcelebahq_dataloader, build_mnist_dataloader
+from data.build_dataloader import build_dataloaders
 from data.data_process import data_process
 from utils import unis
-from utils.ddp import new_ddp, delete_ddp
+from utils.ddp import build_ddp, delete_ddp
 from utils.config import load_config
 from metrics.losses import vae_loss
 from utils.logger import create_logger
 from utils.checkpoint import save_ckpt, load_ckpt
 from utils.lr_scheduler import warmup_cosine_decay
 from models.autoencoders.vae_midattn import VAE
-from engine import vae_engine
+from .. import vae_engine
 
 
 def main(config):
-    rank, local_rank, world_size, device = new_ddp(config)
+    rank, local_rank, world_size, device = build_ddp()
 
     seed = config.seed + rank
     if config.seed_everything:
@@ -30,7 +30,7 @@ def main(config):
     logger = create_logger(config.path.logs_dir, rank, name=config.model.name)
     unis.results_mkdirs(config, logger)
 
-    train_dataloader, val_dataloader, test_dataloader, train_sampler = build_mmcelebahq_dataloader(config, rank)
+    train_dataloader, val_dataloader, test_dataloader, train_sampler = build_dataloaders(config, rank)
 
     # Initialize Model with DDP
     model_kwargs = {

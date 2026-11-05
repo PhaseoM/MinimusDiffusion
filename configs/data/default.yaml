@@ -1,0 +1,25 @@
+defaults:
+  - dataset: mm_celeba_hq
+  _self_
+
+batch_size: ${batch_size}
+train:
+  start_epoch: 0
+  epochs: 100
+  shuffle: True
+  num_workers: 4
+  pin_memory: True
+  training: True
+val:
+  dataset_ratio: 0.1
+  val_epoch_freq: 1
+  shuffle: True
+  num_workers: 4
+  pin_memory: True
+  training: False
+test:
+  dataset_ratio: 0.1
+  num_samples: 3000
+  num_timesteps: 100
+  guidance_scales: [1.0, 1.5, 2.0, 3.0, 5.0]
+  
