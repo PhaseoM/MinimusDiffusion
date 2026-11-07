@@ -1,0 +1,5 @@
+_target_: utils.lr_scheduler.ConstantLRScheduler
+warmup_steps: 0
+warmup_start_ratio: 0.0
+min_lr_ratio: 0.0
+last_epoch: -1

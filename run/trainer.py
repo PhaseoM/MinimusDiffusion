@@ -8,7 +8,7 @@ from typing import Optional, List, Type, Tuple, Dict
 import torch
 import torch.distributed as dist
 from torch import nn
-from models.modules.neural_ode import GaussianConditionalProbabilityPath, CFGVectorFieldODE, EulerSimulator
+from models.modules.fm_lib import GaussianConditionalProbabilityPath, CFGVectorFieldODE, EulerSimulator
 from models.autoencoders.vae_midattn import VAE
 from metrics.losses import mseloss
 
@@ -41,7 +41,7 @@ class LDMTrainer(Trainer):
     def __init__(
         self,
         device: torch.device,
-        model: nn.Module,
+        diffusion_model: nn.Module,
         autoencoder: Optional[nn.Module],
         prob_path: GaussianConditionalProbabilityPath,
         optimizer: torch.optim.Optimizer,
@@ -53,7 +53,7 @@ class LDMTrainer(Trainer):
         amp_enabled: bool = True,
     ):
         self.device = device
-        self.model = model
+        self.diffusion_model = diffusion_model
         self.autoencoder = autoencoder
         self.prob_path = prob_path
         self.optimizer = optimizer
@@ -73,7 +73,7 @@ class LDMTrainer(Trainer):
         return droped_prompts
 
     def train(self, dataloader, use_cache: bool = False):
-        self.model.train()
+        self.diffusion_model.train()
         train_loss = torch.zeros(1, device=self.device)
         sample_count = torch.zeros(1, device=self.device)
         if not use_cache:
@@ -105,14 +105,14 @@ class LDMTrainer(Trainer):
                 t = torch.rand(batch_size, device=self.device, dtype=torch.float32) * (1 - self.time_eps)
                 x_latent = self.prob_path.sample_conditional_path(z_latent, t)
 
-                ut_theta = self.model(x_latent, t, prompt)
+                ut_theta = self.diffusion_model(x_latent, t, prompt)
                 ut_target = self.prob_path.conditional_vector_field(x_latent, z_latent, t)
                 loss = mseloss(ut_theta, ut_target)
 
             # loss backward with Gradient Scaling
             self.loss_scaler.scale(loss).backward()
             self.loss_scaler.unscale_(self.optimizer)
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+            torch.nn.utils.clip_grad_norm_(self.diffusion_model.parameters(), max_norm=1.0)
 
             # Gradient Clipping
             scale_before = self.loss_scaler.get_scale()
@@ -133,7 +133,7 @@ class LDMTrainer(Trainer):
 
     @torch.no_grad()
     def validate(self, dataloader, use_cache: bool = False):
-        self.model.eval()
+        self.diffusion_model.eval()
 
         val_loss = torch.zeros(1, device=self.device)
         sample_count = torch.zeros(1, device=self.device)
@@ -157,7 +157,7 @@ class LDMTrainer(Trainer):
                 t = torch.rand(batch_size, device=self.device, dtype=torch.float32) * (1 - self.time_eps)
                 x_latent = self.prob_path.sample_conditional_path(z_latent, t)
 
-                ut_theta = self.model(x_latent, t, prompt)
+                ut_theta = self.diffusion_model(x_latent, t, prompt)
                 ut_target = self.prob_path.conditional_vector_field(x_latent, z_latent, t)
                 loss = mseloss(ut_theta, ut_target)
 
@@ -171,7 +171,7 @@ class LDMTrainer(Trainer):
 
     @torch.no_grad()
     def test(self, dataloader, use_cache: bool = False):
-        self.model.eval()
+        self.diffusion_model.eval()
 
         test_loss = 0
         size_n = len(dataloader.dataset)
@@ -194,7 +194,7 @@ class LDMTrainer(Trainer):
             t = torch.rand(batch_size, device=self.device) * (1 - self.time_eps)
             x_latent = self.prob_path.sample_conditional_path(z_latent, t)
 
-            ut_theta = self.model(x_latent, t, prompt)
+            ut_theta = self.diffusion_model(x_latent, t, prompt)
             ut_target = self.prob_path.conditional_vector_field(x_latent, z_latent, t)
 
             loss = mseloss(ut_theta, ut_target)

@@ -1,23 +1,26 @@
 #!/usr/bin/env bash
 set -e
 
-WORLD_SIZE=3
-CUDA_DEVICES="1,2,3"
-TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
+WORLD_SIZE=1
+CUDA_DEVICES="5"
 
-# AUTO_RESUME=false
-# RESUME_TIMESTAMP=""
-# RESUME_PATH=""
+# test
+# CUDA_VISIBLE_DEVICES="$CUDA_DEVICES" \
+# torchrun --standalone --nproc_per_node="$WORLD_SIZE" \
+#     --module run.train.ldm_train \
+#     --config configs/test.yaml
 
-# if [[ "$AUTO_RESUME" == "true" ]]; then
-#     TIMESTAMP="$RESUME_TIMESTAMP"
-# fi
+# resume test
+# CUDA_VISIBLE_DEVICES="$CUDA_DEVICES" \
+# torchrun --standalone --nproc_per_node="$WORLD_SIZE" \
+#     --module run.train.ldm_train \
+#     --config configs/test.yaml \
+#     auto_resume=true \
+#     resume_path="./results/TEST_20261107_230103/ckpts/ckpt_epoch_0004.pth" \
+#     exp_name="TEST_20261107_230103"
 
 CUDA_VISIBLE_DEVICES="$CUDA_DEVICES" \
 torchrun --standalone --nproc_per_node="$WORLD_SIZE" \
     --module run.train.ldm_train \
-    --schema configs/diffusionmodels/schema.yaml \
-    --config configs/diffusionmodels/dit_base4.yaml \
-    timestamp="'$TIMESTAMP'" \
-    dist.world_size="$WORLD_SIZE" \
-    dist.num_workers=2
+    --config configs/dit_base4_vae_f8c8.yaml
+

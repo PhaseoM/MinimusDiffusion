@@ -9,6 +9,7 @@ from torch import nn
 from pathlib import Path
 from functools import wraps
 from datetime import datetime
+from utils.config import Config
 
 
 def seed_everything(seed: int = 42, is_deterministic: bool = False):
@@ -78,19 +79,6 @@ def store_model_params(model, checkpoint_path, model_name):
     time_token = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     model_file = model_dump_path / f"{time_token}.pth"
     torch.save(model.state_dict(), str(model_file))
-
-
-def results_mkdirs(config, logger):
-    fullname = config.model.fullname
-
-    ckpts_dir = Path(config.path.ckpts_dir)
-    data_dump_dir = Path(config.path.data_dump_dir)
-    logs_dir = Path(config.path.logs_dir)
-
-    ckpts_dir.mkdir(parents=True, exist_ok=True)
-    data_dump_dir.mkdir(parents=True, exist_ok=True)
-    logs_dir.mkdir(parents=True, exist_ok=True)
-    logger.info(f"Made the results dir for {fullname}.")
 
 
 def model_size_b(model: nn.Module, logger, MiB: int = 1024**2) -> int:

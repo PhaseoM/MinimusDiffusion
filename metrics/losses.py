@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from models.modules.neural_ode import GaussianConditionalProbabilityPath
+from models.modules.fm_lib import GaussianConditionalProbabilityPath
 
 
 def vae_loss(

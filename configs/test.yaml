@@ -1,0 +1,21 @@
+defaults:
+  - config
+  - override model/diffusion: dit_tiny4
+  - override optim/scheduler: constant
+  - _self_
+
+name: TEST
+seed: 261106
+max_epochs: 20
+
+auto_resume: false
+resume_path: null
+
+data:
+  batch_size: 384
+  use_cache: true
+  train:
+    num_workers: 1
+
+checkpoint:
+  save_freq: 1

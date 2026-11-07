@@ -1,0 +1,5 @@
+_target_: models.probpaths.GaussianLinearPath
+p_simple_shape:
+  - ${model.diffusion.channels}
+  - ${model.diffusion.img_size}
+  - ${model.diffusion.img_size}

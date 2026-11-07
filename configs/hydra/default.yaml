@@ -3,9 +3,8 @@ defaults:
   - override job_logging: none
   - override hydra_logging: none
 
-# output directory, generated dynamically on each run
 run:
-  dir: ${result.output_dir}
+  dir: ${result_dir}
 job:
   chdir: false
 output_subdir: .hydra/rank_${oc.env:RANK,0}

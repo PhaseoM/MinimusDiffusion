@@ -1,0 +1,10 @@
+defaults:
+  - diffusion: dit_base4
+  - autoencoder: vae_f8c8
+  - probpath: linear
+  - _self_
+
+time_eps: 0.001
+use_cache: ${data.use_cache}
+autoencoder_path: ./results/VAE_mmchq_f8c8_betae-1/ckpts/ckpt_epoch_0100.pth
+diffusion_path: ./results/DiT_d512_f8c8_l8p4/ckpts/ckpt_epoch_0400.pth

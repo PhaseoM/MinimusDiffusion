@@ -1,8 +1,7 @@
 import torch
 from torch import nn, Tensor
 from einops import rearrange
-from ..modules.res import ResidualBlock, DownSampling, UpSampling
-from ..modules.attn import ImageAttentionBlock
+from ..modules.uni_lib import ResidualBlock, DownSampling, UpSampling, ImageAttentionBlock
 
 
 class EncoderBlock(nn.Module):

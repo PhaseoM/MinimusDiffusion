@@ -1,0 +1,5 @@
+_target_: utils.lr_scheduler.CosineLRScheduler
+warmup_steps: 300
+warmup_start_ratio: 1e-2
+min_lr_ratio: 0.0
+last_epoch: -1

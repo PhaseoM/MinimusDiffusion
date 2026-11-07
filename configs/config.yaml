@@ -1,25 +1,38 @@
 defaults:
-  - diffusion: base4
-  - autoencoder: default
+  - model: ldm_default
   - data: default
-  - optim: adamw
+  - optim: default
   - hydra: default
   - _self_
 
-exp_name: "exp001"
-seed: 1105
+name: "LDM"
+timestamp: ${now:%Y-%m-%d_%H-%M-%S}
+exp_name: ${name}_${timestamp}
+result_dir: results/${exp_name}
+seed: 261106
 seed_everything: True
-save_freq: 5
-auto_resume: False
-resume_path: ${result.ckpts_dir}/ckpt_epoch_0005.pth
+start_epoch: 0
+max_epochs: 100
 
-amp:
-  enabled: True
-  autocast_dtype: float16
+# if u want to resume some ckpt, you should modify 
+# "auto_resume=True", 
+# "resume_path=results/{resume_exp_name}/ckpts/some_ckpt.pth", 
+# "exp_name={resume_exp_name}" 
+auto_resume: False
+resume_path: null
+
+
 distributed:
+  backend: nccl
   main_rank: 0
-result:
-  results_dir: ./results
-  output_dir: ${.results_dir}/${exp_name}
-  ckpts_dir: ${.output_dir}/ckpts
-  logs_dir: ${.output_dir}/logs
+checkpoint:
+  save_freq: ${max_epochs}
+  ckpt_dir: ${result_dir}/ckpts
+logging:
+  log_dir: ${result_dir}/logs
+  # used later ...
+  log_freq: 1
+  log_level_primary: INFO
+  log_level_secondary: WARNING
+  all_ranks: false
+

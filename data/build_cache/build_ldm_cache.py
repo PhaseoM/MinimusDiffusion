@@ -1,11 +1,10 @@
 """Build VAE and CLIP caches using the existing training config.
 
 Run from the repository root:
-    python -B scripts/build_ldm_cache.py \
-        --schema configs/diffusionmodels/schema.yaml \
-        --config configs/diffusionmodels/dit_medium4.yaml
+    python -B -m data.build_cache.build_ldm_cache \
+        --config configs/config.yaml
 
-Both encoders follow config.dist.amp on CUDA; arrays are stored in FP32.
+Both encoders follow config.optim.amp on CUDA; arrays are stored in FP32.
 metadata.json is written only after the cache is complete. Existing output
 folders are never overwritten. Sample latent noise and apply prompt dropout
 online during training. text_features[i, j] is caption j of dataset.images[i];
@@ -24,8 +23,8 @@ from tqdm import tqdm
 
 from data.build_datasets import MMCelebAHQDataset
 from models.autoencoders.vae_midattn import VAE
-from models.diffusionmodels.dit import PromptEncoder
-from utils.config import load_config
+from models.diffusions.dit import PromptEncoder
+from utils.config import Config, load_config
 
 
 def read_captions(dataset):
@@ -42,9 +41,9 @@ def read_captions(dataset):
 
 
 @torch.no_grad()
-def build_latent_cache(config, dataset, output, device):
+def build_latent_cache(config: Config, dataset, output, device):
     # load vae encoder and z_channels
-    checkpoint = torch.load(config.path.vae_ckpt_path, map_location="cpu", weights_only=True)
+    checkpoint = torch.load(config.model.diffusion.autoencoder_path, map_location="cpu", weights_only=True)
     vae = VAE(**checkpoint["model_kwargs"])
     vae.load_state_dict(checkpoint["model"], strict=True)
     encoder = vae._encoder.eval().requires_grad_(False).to(device)
@@ -53,17 +52,21 @@ def build_latent_cache(config, dataset, output, device):
 
     loader = DataLoader(
         dataset,
-        batch_size=config.train.batch_size,
+        batch_size=config.data.batch_size,
         shuffle=False,
-        num_workers=config.dist.num_workers,
-        pin_memory=device.type == "cuda",
+        num_workers=config.data.train.num_workers,
+        pin_memory=config.data.train.pin_memory and device.type == "cuda",
     )
-    shape = (len(dataset), channels, config.model.z_img_size, config.model.z_img_size)
+    shape = (len(dataset), channels, config.model.diffusion.z_img_size, config.model.diffusion.z_img_size)
     means = np.lib.format.open_memmap(output / "z_mean.npy", mode="w+", dtype="float32", shape=shape)
     offset = 0
     for images, _ in tqdm(loader, desc="VAE cache"):
         images = images.to(device, non_blocking=True)
-        with torch.amp.autocast(device.type, dtype=torch.float16, enabled=config.dist.amp and device.type == "cuda"):
+        with torch.amp.autocast(
+            device.type,
+            dtype=getattr(torch, config.optim.amp.autocast_dtype),
+            enabled=config.optim.amp.enabled and device.type == "cuda",
+        ):
             mean, logvar = encoder(images)
         values = mean.float().cpu().numpy()
         if values.shape[1:] != shape[1:] or not np.isfinite(values).all():
@@ -79,8 +82,10 @@ def build_latent_cache(config, dataset, output, device):
 
 
 @torch.no_grad()
-def build_text_cache(config, captions_by_image, output, device):
-    encoder = PromptEncoder(text_encoder_path=config.path.text_encoder_path).eval().requires_grad_(False).to(device)
+def build_text_cache(config: Config, captions_by_image, output, device):
+    encoder = (
+        PromptEncoder(text_encoder_path=config.model.diffusion.text_encoder_path).eval().requires_grad_(False).to(device)
+    )
     image_count, caption_count = len(captions_by_image), len(captions_by_image[0])
     features = np.lib.format.open_memmap(
         output / "text_features.npy",
@@ -91,37 +96,45 @@ def build_text_cache(config, captions_by_image, output, device):
     # A flat view allows batches to cross image boundaries without extra mappings.
     flat_features = features.reshape(-1, encoder.output_dim)
     texts = [caption for captions in captions_by_image for caption in captions]
-    batch_size = config.train.batch_size
+    batch_size = config.data.batch_size
     for start in tqdm(range(0, len(texts), batch_size), desc="CLIP cache"):
-        with torch.amp.autocast(device.type, dtype=torch.float16, enabled=config.dist.amp and device.type == "cuda"):
+        with torch.amp.autocast(
+            device.type,
+            dtype=getattr(torch, config.optim.amp.autocast_dtype),
+            enabled=config.optim.amp.enabled and device.type == "cuda",
+        ):
             values = encoder(texts[start : start + batch_size]).float().cpu().numpy()
         if not np.isfinite(values).all():
             raise ValueError("Non-finite CLIP features")
         flat_features[start : start + len(values)] = values
     features.flush()
-    with torch.amp.autocast(device.type, dtype=torch.float16, enabled=config.dist.amp and device.type == "cuda"):
+    with torch.amp.autocast(
+        device.type,
+        dtype=getattr(torch, config.optim.amp.autocast_dtype),
+        enabled=config.optim.amp.enabled and device.type == "cuda",
+    ):
         empty_feature = encoder([""])[0].float().cpu().numpy()
     if not np.isfinite(empty_feature).all():
         raise ValueError("Non-finite empty text feature")
     np.save(output / "empty_text_feature.npy", empty_feature, allow_pickle=False)
 
 
-def main(config):
-    output = Path(config.path.cache_path)
+def main(config: Config):
+    output = Path(config.data.dataset.cache_path)
     if output.exists():
         raise FileExistsError(f"Cache directory already exists: {output}")
-    if not Path(config.path.vae_ckpt_path).is_file():
-        raise FileNotFoundError(config.path.vae_ckpt_path)
-    if not Path(config.path.text_encoder_path).is_dir():
-        raise FileNotFoundError(config.path.text_encoder_path)
+    if not Path(config.model.diffusion.autoencoder_path).is_file():
+        raise FileNotFoundError(config.model.diffusion.autoencoder_path)
+    if not Path(config.model.diffusion.text_encoder_path).is_dir():
+        raise FileNotFoundError(config.model.diffusion.text_encoder_path)
 
     transform = v2.Compose([
         v2.ToImage(),
-        v2.Resize(tuple(config.data.img_size), antialias=True),
+        v2.Resize(tuple(config.data.dataset.img_size), antialias=True),
         v2.ToDtype(torch.float32, scale=True),
         v2.Normalize(mean=[0.5] * 3, std=[0.5] * 3),
     ])
-    dataset = MMCelebAHQDataset(config.path.dataset_path, img_transform=transform, caption_mode="first")
+    dataset = MMCelebAHQDataset(config.data.dataset.dataset_path, img_transform=transform, caption_mode="first")
     if not len(dataset):
         raise ValueError("Dataset is empty")
     captions_by_image = read_captions(dataset)
@@ -130,16 +143,19 @@ def main(config):
     build_latent_cache(config, dataset, output, device)
     build_text_cache(config, captions_by_image, output, device)
 
+    precision = {"float16": "fp16", "bfloat16": "bf16"}.get(
+        config.optim.amp.autocast_dtype, config.optim.amp.autocast_dtype
+    )
     metadata = {
         "format_version": 3,
         "status": "complete",
         "text_layout": ["image", "caption", "feature"],
         "image_order": "numeric filename stem, ascending",
-        "dataset_root": str(Path(config.path.dataset_path).resolve()),
-        "vae_checkpoint": str(Path(config.path.vae_ckpt_path).resolve()),
-        "text_encoder_path": str(Path(config.path.text_encoder_path).resolve()),
-        "img_size": list(config.data.img_size),
-        "compute_precision": "autocast_fp16" if config.dist.amp and device.type == "cuda" else "fp32",
+        "dataset_root": str(Path(config.data.dataset.dataset_path).resolve()),
+        "vae_checkpoint": str(Path(config.model.diffusion.autoencoder_path).resolve()),
+        "text_encoder_path": str(Path(config.model.diffusion.text_encoder_path).resolve()),
+        "img_size": list(config.data.dataset.img_size),
+        "compute_precision": f"autocast_{precision}" if config.optim.amp.enabled and device.type == "cuda" else "fp32",
     }
     temporary = output / "metadata.json.tmp"
     temporary.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")

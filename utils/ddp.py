@@ -1,13 +1,14 @@
 import os
 import torch
 import torch.distributed as dist
+from utils.config import DistributedConfig
 
 
-def build_ddp():
+def build_ddp(dist_conf: DistributedConfig):
     if not torch.cuda.is_available():
         raise RuntimeError("DDP without CUDA")
 
-    dist.init_process_group(backend="nccl")
+    dist.init_process_group(backend=dist_conf.backend)
 
     rank = dist.get_rank()
     local_rank = int(os.environ["LOCAL_RANK"])

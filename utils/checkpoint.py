@@ -3,6 +3,7 @@ import torch
 from omegaconf import OmegaConf
 from pathlib import Path
 from torch.nn.parallel import DistributedDataParallel as DDP
+from utils.config import Config
 
 
 def load_ckpt(resume_path, model, optimizer, lr_scheduler, loss_scaler, logger):
@@ -23,7 +24,7 @@ def load_ckpt(resume_path, model, optimizer, lr_scheduler, loss_scaler, logger):
     return checkpoint["epoch"] + 1, checkpoint["history"]
 
 
-def save_ckpt(config, epoch, model, optimizer, lr_scheduler, loss_scaler, model_kwargs, history, logger):
+def save_ckpt(config: Config, epoch, model, optimizer, lr_scheduler, loss_scaler, history, logger):
     raw_model = model.module if isinstance(model, DDP) else model
 
     save_state = {
@@ -33,11 +34,10 @@ def save_ckpt(config, epoch, model, optimizer, lr_scheduler, loss_scaler, model_
         "scaler": loss_scaler.state_dict(),
         "epoch": epoch,
         "config": OmegaConf.to_container(config, resolve=True),
-        "model_kwargs": model_kwargs,
         "history": history,
     }
 
-    save_path = Path(config.path.ckpts_dir) / f"ckpt_epoch_{epoch + 1:04d}.pth"
+    save_path = Path(config.checkpoint.ckpt_dir) / f"ckpt_epoch_{epoch + 1:04d}.pth"
     save_path.parent.mkdir(parents=True, exist_ok=True)
     logger.info(f"{save_path} saving...")
     torch.save(save_state, save_path)

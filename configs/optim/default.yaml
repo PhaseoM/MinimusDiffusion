@@ -1,0 +1,8 @@
+defaults:
+  - optimizer: adamw
+  - scheduler: cosine_r2s300
+  - _self_
+
+amp:
+  enabled: True
+  autocast_dtype: float16

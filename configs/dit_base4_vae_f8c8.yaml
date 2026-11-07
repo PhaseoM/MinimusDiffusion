@@ -1,0 +1,21 @@
+defaults:
+  - config
+  - override model/diffusion: dit_base4
+  - override optim/scheduler: constant
+  - _self_
+
+name: DiT_base4_VAE_f8c8
+seed: 261106
+max_epochs: 300
+
+auto_resume: false
+resume_path: null
+
+data:
+  batch_size: 192
+  use_cache: true
+  train:
+    num_workers: 1
+
+checkpoint:
+  save_freq: ${max_epochs}

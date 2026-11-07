@@ -91,6 +91,24 @@ class GMM(nn.Module, LabeledSampleable):
         return samples, labels
 
 
+class ConditionalVectorField(nn.Module, ABC):
+    """
+    Conditional vector field u_t^theta(x|y)
+    """
+
+    @abstractmethod
+    def forward(self, x: torch.Tensor, t: torch.Tensor, y: torch.Tensor):
+        """
+        Args:
+            - x: (b ...)
+            - t: (b)
+            - y: (b)
+        Return:
+            - u_t^theta(x|y): (b ...)
+        """
+        pass
+
+
 class ConditionalProbabilityPath(nn.Module, ABC):
     """
     Abstract base class for conditional probability paths
@@ -468,24 +486,6 @@ def record_every(num_timesteps: int, record_every: int) -> torch.Tensor:
         torch.arange(0, num_timesteps - 1, record_every),
         torch.tensor([num_timesteps - 1]),
     ])
-
-
-class ConditionalVectorField(nn.Module, ABC):
-    """
-    Conditional vector field u_t^theta(x|y)
-    """
-
-    @abstractmethod
-    def forward(self, x: torch.Tensor, t: torch.Tensor, y: torch.Tensor):
-        """
-        Args:
-            - x: (b ...)
-            - t: (b)
-            - y: (b)
-        Return:
-            - u_t^theta(x|y): (b ...)
-        """
-        pass
 
 
 class CFGVectorFieldODE(ODE):

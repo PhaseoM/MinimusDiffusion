@@ -1,0 +1,11 @@
+_target_: models.diffusions.dit.DiffusionTransformerWithFlowModel
+img_size: 32
+channels: 8
+patch_size: 4
+num_layers: 3
+d_model: 128
+num_heads: 4
+ff_hidden_factor: 4
+final_dim: 16
+text_encoder_name: "clip-vit-large-patch14"
+text_encoder_path: ./pretrained/${.text_encoder_name}

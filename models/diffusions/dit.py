@@ -8,31 +8,8 @@ from einops import rearrange
 from einops.layers.torch import Rearrange
 from transformers import AutoTokenizer, CLIPTextModel
 
-from ..modules.neural_ode import ConditionalVectorField
-
-
-class MLP(nn.Module):
-    def __init__(self, dims: List[int], activation: Type[nn.Module] = nn.SiLU, final_init: bool = False):
-        super().__init__()
-        mlp = []
-        for i in range(len(dims) - 1):
-            mlp.append(nn.Linear(dims[i], dims[i + 1]))
-            if i < len(dims) - 2:
-                mlp.append(activation())
-        self.model = torch.nn.Sequential(*mlp)
-
-        if final_init:
-            nn.init.zeros_(self.model[-1].weight)
-            nn.init.zeros_(self.model[-1].bias)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            - x: (... d)
-        Returns:
-            - x: (... d)
-        """
-        return self.model(x)
+from ..modules.fm_lib import ConditionalVectorField
+from ..modules.uni_lib import MLP, MultiHeadAttention
 
 
 class FourierEncoder(nn.Module):
@@ -105,12 +82,12 @@ class PromptEncoder(nn.Module):
 
 
 class Patchifier(nn.Module):
-    def __init__(self, img_size: int, patch_size: int, c_in: int, dim: int):
+    def __init__(self, img_size: int, patch_size: int, in_channels: int, dim: int):
         super().__init__()
         assert img_size % patch_size == 0, "Image size must be divisible by patch size"
 
         self.model = nn.Sequential(
-            nn.Conv2d(c_in, dim, kernel_size=patch_size, stride=patch_size),
+            nn.Conv2d(in_channels, dim, kernel_size=patch_size, stride=patch_size),
             Rearrange("b d h w -> b (h w) d"),
         )
 
@@ -125,7 +102,7 @@ class Patchifier(nn.Module):
 
 
 class Depatchifier(nn.Module):
-    def __init__(self, img_size: int, patch_size: int, dim: int, final_dim: int, c_out: int):
+    def __init__(self, img_size: int, patch_size: int, dim: int, final_dim: int, out_channels: int):
         super().__init__()
         assert img_size % patch_size == 0, "Image size must be divisible by patch size"
         self.patch_size = patch_size
@@ -138,7 +115,7 @@ class Depatchifier(nn.Module):
             # Depatchify
             Rearrange("b (h w) (f ph pw) -> b f (h ph) (w pw)", h=h, w=w, f=final_dim, ph=patch_size, pw=patch_size),
             # Final convolution
-            nn.Conv2d(final_dim, c_out, kernel_size=3, padding=1),
+            nn.Conv2d(final_dim, out_channels, kernel_size=3, padding=1),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -151,44 +128,13 @@ class Depatchifier(nn.Module):
         return self.model(x)
 
 
-class MultiHeadAttention(nn.Module):
-    def __init__(self, num_heads: int, d_model: int):
-        super().__init__()
-        assert d_model % num_heads == 0
-
-        self.qkv_project = nn.Linear(d_model, d_model * 3)
-        self.split_heads = Rearrange("b l (h d) -> b h l d", h=num_heads)
-        self.merge_heads = Rearrange("b h l d -> b l (h d)", h=num_heads)
-        self.out = nn.Linear(d_model, d_model)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            - x: (b l d)
-        Returns:
-            - x: (b l d)
-        """
-        # Compute queries, keys, and values (b l (h d))
-        q, k, v = self.qkv_project(x).chunk(3, dim=-1)
-
-        # split heads (b h l d)
-        q, k, v = map(self.split_heads, (q, k, v))
-
-        # Compute attention
-        attn = nn.functional.scaled_dot_product_attention(q, k, v)
-
-        # merge heads (b l (h d))
-        x = self.merge_heads(attn)
-
-        return self.out(x)
-
-
 class DiTBlock(nn.Module):
-    def __init__(self, num_heads: int, d_model: int):
+    def __init__(self, num_heads: int, d_model: int, ff_hidden_factor: int):
         """
         Args:
             - num_heads: number of attention heads
             - d_model: dimension of hidden layers
+            - ff_hidden_factor: scaling factor of ff_hidden relative to `d_model`
         """
         super().__init__()
 
@@ -204,7 +150,7 @@ class DiTBlock(nn.Module):
         self.mha = MultiHeadAttention(num_heads, d_model)
 
         # Feedforward
-        self.ff = MLP([d_model, 4 * d_model, d_model])
+        self.ff = MLP([d_model, ff_hidden_factor * d_model, d_model])
 
     def modulate(self, x: torch.Tensor, scale: torch.Tensor, bias: torch.Tensor) -> torch.Tensor:
         """
@@ -238,10 +184,11 @@ class DiTBlock(nn.Module):
 class DiffusionTransformer(nn.Module):
     def __init__(
         self,
-        num_heads: int,
         num_layers: int,
+        num_heads: int,
         num_tokens: int,
         d_model: int,
+        ff_hidden_factor: int,
     ):
         """
         Args:
@@ -249,13 +196,12 @@ class DiffusionTransformer(nn.Module):
             - num_layers: number of layers
             - num_tokens: sequence length (for sake of positional embeddings)
             - d_model: dimension of hidden layers
+            - ff_hidden_factor: scaling factor of ff_hidden relative to `d_model`
         """
         super().__init__()
         self.layers = nn.ModuleList([])
         for _ in range(num_layers):
-            self.layers.append(DiTBlock(num_heads, d_model))
-
-        # Positional encodings
+            self.layers.append(DiTBlock(num_heads, d_model, ff_hidden_factor))
         self.pos_encodings = nn.Parameter(torch.randn(num_tokens, d_model))
 
     def forward(self, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
@@ -276,11 +222,12 @@ class DiffusionTransformerWithFlowModel(ConditionalVectorField):
     def __init__(
         self,
         img_size: int = 32,
-        patch_size: int = 8,
+        channels: int = 8,
+        patch_size: int = 4,
         num_layers: int = 12,
-        c: int = 1,
-        d_model: int = 256,
-        num_heads: int = 4,
+        d_model: int = 768,
+        num_heads: int = 8,
+        ff_hidden_factor: int = 4,
         final_dim: int = 10,
         text_encoder_name: str = "openai/clip-vit-large-patch14",
         text_encoder_path: str = "./pretrained/clip-vit-large-patch14",
@@ -295,15 +242,30 @@ class DiffusionTransformerWithFlowModel(ConditionalVectorField):
         )
 
         # build patchifier
-        self.patchifier = Patchifier(img_size=img_size, patch_size=patch_size, c_in=c, dim=d_model)
+        self.patchifier = Patchifier(
+            img_size=img_size,
+            patch_size=patch_size,
+            in_channels=channels,
+            dim=d_model,
+        )
 
         # build DiT
         num_tokens = (img_size // patch_size) ** 2
-        self.dit = DiffusionTransformer(num_heads, num_layers, num_tokens, d_model)
+        self.dit = DiffusionTransformer(
+            num_layers=num_layers,
+            num_heads=num_heads,
+            num_tokens=num_tokens,
+            d_model=d_model,
+            ff_hidden_factor=ff_hidden_factor,
+        )
 
         # build depatchifier
         self.depatchifier = Depatchifier(
-            img_size=img_size, patch_size=patch_size, dim=d_model, final_dim=final_dim, c_out=c
+            img_size=img_size,
+            patch_size=patch_size,
+            dim=d_model,
+            final_dim=final_dim,
+            out_channels=channels,
         )
 
     def forward(self, x: torch.Tensor, t: torch.Tensor, y: torch.Tensor | list[str]) -> torch.Tensor:

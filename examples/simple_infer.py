@@ -33,6 +33,16 @@ def project_path(value):
     return path if path.is_absolute() else ROOT / path
 
 
+def get_vae_checkpoint(checkpoint):
+    if VAE_CHECKPOINT:
+        return VAE_CHECKPOINT
+    config = checkpoint["config"]
+    if "diffusion" in config.get("model", {}):
+        return config["model"]["diffusion"]["autoencoder_path"]
+    # Checkpoints saved before the configuration migration.
+    return config["path"]["vae_ckpt_path"]
+
+
 @torch.inference_mode()
 def main():
     # 避免给项目模块写入 __pycache__，运行缓存也统一放在 results/。
@@ -43,7 +53,7 @@ def main():
         os.environ[key] = str(cache / key.lower())
 
     from models.autoencoders.vae_midattn import VAE
-    from models.diffusionmodels.dit import DiffusionTransformerWithFlowModel
+    from models.diffusions.dit import DiffusionTransformerWithFlowModel
 
     if NUM_STEPS <= 0 or NUM_IMAGES <= 0:
         raise ValueError("NUM_STEPS 和 NUM_IMAGES 必须大于 0")
@@ -63,7 +73,7 @@ def main():
     model_kwargs["text_encoder_path"] = str(project_path(TEXT_ENCODER_PATH))
     model = DiffusionTransformerWithFlowModel(**model_kwargs)
     model.load_state_dict(checkpoint["model"], strict=True)
-    vae_path = VAE_CHECKPOINT or checkpoint["config"]["path"]["vae_ckpt_path"]
+    vae_path = get_vae_checkpoint(checkpoint)
     del checkpoint
     model = model.to(device).eval().requires_grad_(False)
 
