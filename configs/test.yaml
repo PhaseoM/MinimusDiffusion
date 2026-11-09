@@ -12,7 +12,7 @@ auto_resume: false
 resume_path: null
 
 data:
-  batch_size: 384
+  batch_size: 768
   use_cache: true
   train:
     num_workers: 1

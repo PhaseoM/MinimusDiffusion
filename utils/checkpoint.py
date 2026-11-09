@@ -19,7 +19,7 @@ def load_ckpt(resume_path, model, optimizer, lr_scheduler, loss_scaler, logger):
     lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
     loss_scaler.load_state_dict(checkpoint["scaler"])
 
-    logger.info(f"=> loaded successfully '{resume_path}' (epoch {checkpoint['epoch']})")
+    logger.info(f"=> loaded successfully '{resume_path}' (epoch {checkpoint['epoch'] + 1})")
 
     return checkpoint["epoch"] + 1, checkpoint["history"]
 

@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 CHECKPOINT = "./results/DiT_20261104_211157/ckpts/ckpt_epoch_0300.pth"
 VAE_CHECKPOINT = None  # None：使用 LDM 检查点记录的 VAE；手动指定时须与训练匹配
-TEXT_ENCODER_PATH = "pretrained/clip-vit-large-patch14"
+TEXT_ENCODER_PATH = None  # None：使用 LDM 检查点记录的文本编码器路径
 
 PROMPT = "This man appears to be . The person is with mouth slightly open, bags under eyes, big nose, eyeglasses, pale skin, pointy nose and wears ."
 NEGATIVE_PROMPT = ""
@@ -36,17 +36,64 @@ def project_path(value):
 def get_vae_checkpoint(checkpoint):
     if VAE_CHECKPOINT:
         return VAE_CHECKPOINT
+    config = checkpoint.get("config", {})
+    model_config = config.get("model", {})
+    # Current config, intermediate migration, then the original config.
+    for path in (
+        model_config.get("autoencoder_path"),
+        model_config.get("diffusion", {}).get("autoencoder_path"),
+        config.get("path", {}).get("vae_ckpt_path"),
+    ):
+        if path:
+            return path
+    raise ValueError("LDM 检查点未记录 VAE 路径，请设置 VAE_CHECKPOINT")
+
+
+def get_diffusion_kwargs(checkpoint):
+    if "model_kwargs" in checkpoint:
+        kwargs = dict(checkpoint["model_kwargs"])
+    else:
+        kwargs = dict(checkpoint["config"]["model"]["diffusion"])
+    for key in ("_target_", "_recursive_", "_convert_", "_partial_"):
+        kwargs.pop(key, None)
+    if "c" in kwargs:
+        channels = kwargs.pop("c")
+        if "channels" in kwargs and kwargs["channels"] != channels:
+            raise ValueError("LDM 检查点的 c 与 channels 不一致")
+        kwargs["channels"] = channels
+    return kwargs
+
+
+def get_vae_kwargs(checkpoint):
+    if "model_kwargs" in checkpoint:
+        return dict(checkpoint["model_kwargs"])
     config = checkpoint["config"]
-    if "diffusion" in config.get("model", {}):
-        return config["model"]["diffusion"]["autoencoder_path"]
-    # Checkpoints saved before the configuration migration.
-    return config["path"]["vae_ckpt_path"]
+    model_config = config["model"]
+    vae_config = model_config.get("autoencoder", model_config)
+    # beta belongs to the loss, not the VAE constructor.
+    keys = (
+        "in_channels",
+        "init_channels",
+        "z_channels",
+        "x_channels",
+        "ch_mult",
+        "num_groups",
+        "shift_factor",
+        "scale_factor",
+    )
+    kwargs = {key: vae_config[key] for key in keys if key in vae_config}
+    if "in_channels" not in kwargs:
+        data_config = config["data"]
+        kwargs["in_channels"] = data_config.get("dataset", data_config)["img_channels"]
+    return kwargs
 
 
 @torch.inference_mode()
 def main():
     # 避免给项目模块写入 __pycache__，运行缓存也统一放在 results/。
     sys.dont_write_bytecode = True
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
     cache = ROOT / "results" / "simple_infer" / "_cache"
     cache.mkdir(parents=True, exist_ok=True)
     for key in ("HF_HOME", "TORCH_HOME", "CUDA_CACHE_PATH", "TRITON_CACHE_DIR"):
@@ -69,8 +116,9 @@ def main():
 
     print(f"加载 LDM：{CHECKPOINT}；设备：{device}", flush=True)
     checkpoint = torch.load(project_path(CHECKPOINT), map_location="cpu", weights_only=True, mmap=True)
-    model_kwargs = dict(checkpoint["model_kwargs"])
-    model_kwargs["text_encoder_path"] = str(project_path(TEXT_ENCODER_PATH))
+    model_kwargs = get_diffusion_kwargs(checkpoint)
+    text_encoder_path = TEXT_ENCODER_PATH or model_kwargs.get("text_encoder_path", "pretrained/clip-vit-large-patch14")
+    model_kwargs["text_encoder_path"] = str(project_path(text_encoder_path))
     model = DiffusionTransformerWithFlowModel(**model_kwargs)
     model.load_state_dict(checkpoint["model"], strict=True)
     vae_path = get_vae_checkpoint(checkpoint)
@@ -79,8 +127,8 @@ def main():
 
     print(f"加载 VAE：{vae_path}", flush=True)
     checkpoint = torch.load(project_path(vae_path), map_location="cpu", weights_only=True, mmap=True)
-    vae_kwargs = checkpoint["model_kwargs"]
-    if model_kwargs["c"] != vae_kwargs["z_channels"]:
+    vae_kwargs = get_vae_kwargs(checkpoint)
+    if model_kwargs["channels"] != vae_kwargs["z_channels"]:
         raise ValueError("LDM 潜通道数与 VAE 不匹配，请检查 VAE_CHECKPOINT")
     vae = VAE(**vae_kwargs)
     vae.load_state_dict(checkpoint["model"], strict=True)
@@ -89,7 +137,7 @@ def main():
 
     generator = torch.Generator(device=device).manual_seed(SEED)
     size = int(model_kwargs["img_size"])
-    z = torch.randn((NUM_IMAGES, model_kwargs["c"], size, size), device=device, generator=generator)
+    z = torch.randn((NUM_IMAGES, model_kwargs["channels"], size, size), device=device, generator=generator)
     times = torch.linspace(0, 1, NUM_STEPS + 1, device=device)
 
     with torch.autocast(device.type, dtype=torch.float16, enabled=USE_FP16 and device.type == "cuda"):
@@ -132,7 +180,7 @@ def main():
     settings = {
         "checkpoint": str(project_path(CHECKPOINT)),
         "vae_checkpoint": str(project_path(vae_path)),
-        "text_encoder_path": str(project_path(TEXT_ENCODER_PATH)),
+        "text_encoder_path": str(project_path(text_encoder_path)),
         "prompt": PROMPT,
         "negative_prompt": NEGATIVE_PROMPT,
         "guidance_scale": GUIDANCE_SCALE,

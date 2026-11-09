@@ -27,6 +27,30 @@ from models.diffusions.dit import PromptEncoder
 from utils.config import Config, load_config
 
 
+def get_vae_kwargs(checkpoint):
+    if "model_kwargs" in checkpoint:
+        return dict(checkpoint["model_kwargs"])
+    config = checkpoint["config"]
+    model_config = config["model"]
+    vae_config = model_config.get("autoencoder", model_config)
+    # beta belongs to the loss, not the VAE constructor.
+    keys = (
+        "in_channels",
+        "init_channels",
+        "z_channels",
+        "x_channels",
+        "ch_mult",
+        "num_groups",
+        "shift_factor",
+        "scale_factor",
+    )
+    kwargs = {key: vae_config[key] for key in keys if key in vae_config}
+    if "in_channels" not in kwargs:
+        data_config = config["data"]
+        kwargs["in_channels"] = data_config.get("dataset", data_config)["img_channels"]
+    return kwargs
+
+
 def read_captions(dataset):
     captions_by_image = []
     for image in dataset.images:
@@ -42,12 +66,17 @@ def read_captions(dataset):
 
 @torch.no_grad()
 def build_latent_cache(config: Config, dataset, output, device):
+    if not len(dataset):
+        raise ValueError("Dataset is empty")
     # load vae encoder and z_channels
-    checkpoint = torch.load(config.model.diffusion.autoencoder_path, map_location="cpu", weights_only=True)
-    vae = VAE(**checkpoint["model_kwargs"])
+    checkpoint = torch.load(config.model.autoencoder_path, map_location="cpu", weights_only=True)
+    vae_kwargs = get_vae_kwargs(checkpoint)
+    channels = vae_kwargs["z_channels"]
+    if channels != config.model.diffusion.channels:
+        raise ValueError("VAE z_channels does not match model.diffusion.channels")
+    vae = VAE(**vae_kwargs)
     vae.load_state_dict(checkpoint["model"], strict=True)
     encoder = vae._encoder.eval().requires_grad_(False).to(device)
-    channels = checkpoint["model_kwargs"]["z_channels"]
     del vae, checkpoint
 
     loader = DataLoader(
@@ -57,7 +86,8 @@ def build_latent_cache(config: Config, dataset, output, device):
         num_workers=config.data.train.num_workers,
         pin_memory=config.data.train.pin_memory and device.type == "cuda",
     )
-    shape = (len(dataset), channels, config.model.diffusion.z_img_size, config.model.diffusion.z_img_size)
+    size = config.model.diffusion.img_size
+    shape = (len(dataset), channels, size, size)
     means = np.lib.format.open_memmap(output / "z_mean.npy", mode="w+", dtype="float32", shape=shape)
     offset = 0
     for images, _ in tqdm(loader, desc="VAE cache"):
@@ -69,11 +99,14 @@ def build_latent_cache(config: Config, dataset, output, device):
         ):
             mean, logvar = encoder(images)
         values = mean.float().cpu().numpy()
-        if values.shape[1:] != shape[1:] or not np.isfinite(values).all():
-            raise ValueError("Invalid VAE mean shape or non-finite values")
+        expected_shape = (len(images), *shape[1:])
+        if values.shape != expected_shape or not np.isfinite(values).all():
+            raise ValueError(f"Expected finite VAE means of shape {expected_shape}, got {values.shape}")
         means[offset : offset + len(images)] = values
         offset += len(images)
 
+    if offset != len(dataset):
+        raise ValueError(f"Expected {len(dataset)} latent samples, wrote {offset}")
     logvar = logvar.float().cpu().numpy()
     if logvar.size != 1 or not np.isfinite(logvar).all():
         raise ValueError("Expected one finite shared z_logvar")
@@ -123,8 +156,8 @@ def main(config: Config):
     output = Path(config.data.dataset.cache_path)
     if output.exists():
         raise FileExistsError(f"Cache directory already exists: {output}")
-    if not Path(config.model.diffusion.autoencoder_path).is_file():
-        raise FileNotFoundError(config.model.diffusion.autoencoder_path)
+    if not Path(config.model.autoencoder_path).is_file():
+        raise FileNotFoundError(config.model.autoencoder_path)
     if not Path(config.model.diffusion.text_encoder_path).is_dir():
         raise FileNotFoundError(config.model.diffusion.text_encoder_path)
 
@@ -152,7 +185,7 @@ def main(config: Config):
         "text_layout": ["image", "caption", "feature"],
         "image_order": "numeric filename stem, ascending",
         "dataset_root": str(Path(config.data.dataset.dataset_path).resolve()),
-        "vae_checkpoint": str(Path(config.model.diffusion.autoencoder_path).resolve()),
+        "vae_checkpoint": str(Path(config.model.autoencoder_path).resolve()),
         "text_encoder_path": str(Path(config.model.diffusion.text_encoder_path).resolve()),
         "img_size": list(config.data.dataset.img_size),
         "compute_precision": f"autocast_{precision}" if config.optim.amp.enabled and device.type == "cuda" else "fp32",

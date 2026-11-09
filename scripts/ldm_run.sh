@@ -2,7 +2,7 @@
 set -e
 
 WORLD_SIZE=1
-CUDA_DEVICES="5"
+CUDA_DEVICES="4"
 
 # test
 # CUDA_VISIBLE_DEVICES="$CUDA_DEVICES" \
@@ -16,8 +16,8 @@ CUDA_DEVICES="5"
 #     --module run.train.ldm_train \
 #     --config configs/test.yaml \
 #     auto_resume=true \
-#     resume_path="./results/TEST_20261107_230103/ckpts/ckpt_epoch_0004.pth" \
-#     exp_name="TEST_20261107_230103"
+#     resume_path="./results/TEST_20261107_230103/ckpts/ckpt_epoch_0008.pth" \
+#     exp_name="TEST_20261107_230103" 
 
 CUDA_VISIBLE_DEVICES="$CUDA_DEVICES" \
 torchrun --standalone --nproc_per_node="$WORLD_SIZE" \
