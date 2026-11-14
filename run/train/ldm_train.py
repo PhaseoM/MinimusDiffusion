@@ -68,7 +68,7 @@ def main(config: Config):
         optimizer=optimizer,
         total_steps=max_epochs * len(train_dataloader),
     )
-    # Instantiate loss_scaler
+    # Initialize loss_scaler
     loss_scaler = torch.amp.GradScaler(enabled=config.optim.amp.enabled)
 
     # resume from the ckpt
